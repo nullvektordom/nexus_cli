@@ -1,0 +1,52 @@
+# --- Rust specific ---
+# The target directory is where all build artifacts (compiled binaries, 
+# intermediate object files, and dependencies) are stored.
+/target/
+
+# --- Backup and Temp Files ---
+# These are often created by text editors during crashes or sessions.
+*.rs.bk
+*.swp
+*~
+
+# --- IDEs and Editors ---
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ / CLion / PyCharm / RustRover
+.idea/
+*.iml
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss
+
+# --- OS Specific ---
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Environment and Secrets ---
+# Never commit secret keys or local environment configurations
+.env
+*.env
+.env.local
+
+# --- Optional: Cargo.lock ---
+# For BINARY projects (apps), you SHOULD commit Cargo.lock to ensure reproducible builds.
+# For LIBRARY projects, some developers prefer to ignore it. 
+# Uncomment the line below ONLY if you are making a library and have a specific reason.
+# Cargo.lock
