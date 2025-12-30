@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod commands;
+mod config;
+
 #[derive(Parser)]
 #[command(name = "nexus")]
 #[command(about = "CLI tool for Obsidian-based project management", long_about = None)]
@@ -40,8 +43,10 @@ fn main() {
 
     match cli.command {
         Commands::Init { project_name } => {
-            println!("Init command called with project: {}", project_name);
-            // TODO: Implement init logic
+            if let Err(e) = commands::init::execute(&project_name) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
         }
         Commands::Gate { project_path } => {
             println!("Gate command called for: {}", project_path.display());
