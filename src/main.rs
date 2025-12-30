@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 mod commands;
 mod config;
+mod heuristics;
+mod planning;
 
 #[derive(Parser)]
 #[command(name = "nexus")]
