@@ -1,0 +1,23 @@
+[project]
+name = "nexus_cli"
+version = "0.1.0"
+# Path to your Obsidian project root
+obsidian_path = "/home/nullvektor/obsidian/execution_helper/Projects/nexus_project"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/sprints"
+
+[gate]
+# We'll use the local sprint file we just created
+heuristics_file = "00-MANAGEMENT/sprints/sprint-2-gate-command/local-docs/Gate-Heuristics.json"
+strict_mode = true
+
+[state]
+active_sprint = "sprint-2-gate-command"
+is_unlocked = false
+last_gate_pass = 2025-12-30T21:18:00Z
+
+[templates]
+claude_template = "templates/CLAUDE.md.example"
