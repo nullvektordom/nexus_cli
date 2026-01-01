@@ -16,10 +16,7 @@ fn test_init_creates_project_successfully() {
 
     // Run init command with absolute path
     let mut cmd = nexus_cmd();
-    cmd.arg("init")
-        .arg(&project_path)
-        .assert()
-        .success();
+    cmd.arg("init").arg(&project_path).assert().success();
 
     // Verify project folder exists
     assert!(
@@ -37,8 +34,7 @@ fn test_init_creates_project_successfully() {
     );
 
     // Verify nexus.toml content
-    let config_content =
-        fs::read_to_string(&config_path).expect("Failed to read nexus.toml");
+    let config_content = fs::read_to_string(&config_path).expect("Failed to read nexus.toml");
     assert!(
         config_content.contains(&format!("project_name = \"{}\"", project_name)),
         "Config should contain project_name"
@@ -73,11 +69,7 @@ fn test_init_creates_project_successfully() {
 
     for file in expected_files {
         let file_path = project_path.join(file);
-        assert!(
-            file_path.exists(),
-            "Template file {} should exist",
-            file
-        );
+        assert!(file_path.exists(), "Template file {} should exist", file);
     }
 
     // Verify subdirectories are copied
@@ -150,15 +142,11 @@ fn test_init_creates_absolute_path_in_config() {
 
     // Run init command
     let mut cmd = nexus_cmd();
-    cmd.arg("init")
-        .arg(&project_path)
-        .assert()
-        .success();
+    cmd.arg("init").arg(&project_path).assert().success();
 
     // Read config
     let config_path = project_path.join("nexus.toml");
-    let config_content =
-        fs::read_to_string(&config_path).expect("Failed to read nexus.toml");
+    let config_content = fs::read_to_string(&config_path).expect("Failed to read nexus.toml");
 
     // Parse the obsidian_path value
     let obsidian_path_line = config_content
