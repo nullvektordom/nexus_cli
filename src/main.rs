@@ -51,8 +51,10 @@ fn main() {
             }
         }
         Commands::Gate { project_path } => {
-            println!("Gate command called for: {}", project_path.display());
-            // TODO: Implement gate logic
+            if let Err(e) = commands::gate::execute(&project_path) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
         }
         Commands::Unlock { project_path } => {
             println!("Unlock command called for: {}", project_path.display());

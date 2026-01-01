@@ -40,12 +40,11 @@ pub fn execute(project_name: &str) -> Result<(), String> {
         ));
     }
 
-    copy_dir_recursive(template_source, &project_path)
-        .map_err(|e| {
-            // Clean up the created folder on error
-            let _ = fs::remove_dir_all(&project_path);
-            format!("Failed to copy template files: {}", e)
-        })?;
+    copy_dir_recursive(template_source, &project_path).map_err(|e| {
+        // Clean up the created folder on error
+        let _ = fs::remove_dir_all(&project_path);
+        format!("Failed to copy template files: {}", e)
+    })?;
 
     println!("✓ Copied template files");
 

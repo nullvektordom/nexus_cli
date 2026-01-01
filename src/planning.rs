@@ -5,7 +5,7 @@
 
 use crate::heuristics::GateHeuristics;
 use anyhow::{Context, Result};
-use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
@@ -24,6 +24,11 @@ pub enum ValidationIssue {
     /// Illegal string found in the document
     IllegalString {
         string: String,
+        context: String,
+        line_estimate: usize,
+    },
+    /// Unchecked checkbox found in dashboard
+    UncheckedCheckbox {
         context: String,
         line_estimate: usize,
     },
@@ -176,6 +181,84 @@ pub fn validate_planning_document(
     Ok(result)
 }
 
+/// Validates a dashboard file for unchecked checkboxes using streaming parser
+///
+/// # Arguments
+/// * `file_path` - Path to the dashboard markdown file (typically 00-START-HERE.md)
+///
+/// # Returns
+/// * `Ok(ValidationResult)` - Validation completed (may contain unchecked checkbox issues)
+/// * `Err` - File could not be read or parsed
+///
+/// # Memory Efficiency
+/// This function uses event-based streaming and does NOT load the entire file into memory.
+/// It detects unchecked checkboxes using pulldown-cmark's TaskListMarker events.
+pub fn validate_dashboard_checkboxes(file_path: &Path) -> Result<ValidationResult> {
+    let content = fs::read_to_string(file_path)
+        .with_context(|| format!("Failed to read dashboard file: {}", file_path.display()))?;
+
+    let mut result = ValidationResult::new();
+
+    // Enable task list parsing
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TASKLISTS);
+    let parser = Parser::new_ext(&content, options);
+
+    // Tracking state during streaming
+    let mut line_number: usize = 1;
+    let mut current_item_text: Vec<String> = Vec::new();
+    let mut current_item_is_unchecked: Option<usize> = None; // Store line number if unchecked
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Item) => {
+                // Reset item tracking
+                current_item_text.clear();
+                current_item_is_unchecked = None;
+            }
+            Event::TaskListMarker(checked) => {
+                // If checkbox is unchecked, mark it for later
+                if !checked {
+                    current_item_is_unchecked = Some(line_number);
+                }
+            }
+            Event::Text(text) => {
+                // Capture text for context if we're tracking an unchecked item
+                if current_item_is_unchecked.is_some() {
+                    current_item_text.push(text.to_string());
+                }
+
+                // Track line numbers
+                line_number += text.matches('\n').count();
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                line_number += 1;
+            }
+            Event::End(TagEnd::Item) => {
+                // If this was an unchecked item, record the issue now with full context
+                if let Some(item_line) = current_item_is_unchecked {
+                    let context = if current_item_text.is_empty() {
+                        "(no text)".to_string()
+                    } else {
+                        current_item_text.join(" ").chars().take(50).collect()
+                    };
+
+                    result.add_issue(ValidationIssue::UncheckedCheckbox {
+                        context,
+                        line_estimate: item_line,
+                    });
+                }
+
+                // Reset tracking
+                current_item_is_unchecked = None;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,5 +386,135 @@ This is a problem section with adequate word count for validation purposes and t
             .filter(|i| matches!(i, ValidationIssue::MissingHeader { .. }))
             .collect();
         assert_eq!(missing_header_issues.len(), 5);
+    }
+
+    #[test]
+    fn test_validate_dashboard_all_checked() {
+        let content = r#"# Dashboard
+- [x] Task 1 completed
+- [x] Task 2 completed
+- [x] Task 3 completed
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = validate_dashboard_checkboxes(temp_file.path()).unwrap();
+
+        assert!(
+            result.passed,
+            "Expected dashboard to pass with all boxes checked"
+        );
+        assert_eq!(result.issues.len(), 0);
+        assert!(!result.has_issues());
+    }
+
+    #[test]
+    fn test_validate_dashboard_with_unchecked() {
+        let content = r#"# Dashboard
+- [x] Task 1 completed
+- [ ] Task 2 not done
+- [x] Task 3 completed
+- [ ] Task 4 pending
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = validate_dashboard_checkboxes(temp_file.path()).unwrap();
+
+        assert!(
+            !result.passed,
+            "Expected dashboard to fail with unchecked boxes"
+        );
+
+        let unchecked_issues: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| matches!(i, ValidationIssue::UncheckedCheckbox { .. }))
+            .collect();
+        assert_eq!(
+            unchecked_issues.len(),
+            2,
+            "Should find 2 unchecked checkboxes"
+        );
+    }
+
+    #[test]
+    fn test_validate_dashboard_empty() {
+        let content = r#"# Dashboard
+This is just regular text with no checkboxes.
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = validate_dashboard_checkboxes(temp_file.path()).unwrap();
+
+        assert!(result.passed, "Expected empty dashboard to pass");
+        assert_eq!(result.issues.len(), 0);
+    }
+
+    #[test]
+    fn test_validate_dashboard_mixed_lists() {
+        let content = r#"# Dashboard
+Regular list:
+- Item 1
+- Item 2
+
+Task list:
+- [x] Done task
+- [ ] Pending task
+
+Another regular list:
+- Item 3
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = validate_dashboard_checkboxes(temp_file.path()).unwrap();
+
+        assert!(
+            !result.passed,
+            "Expected dashboard to fail with 1 unchecked box"
+        );
+
+        let unchecked_issues: Vec<_> = result
+            .issues
+            .iter()
+            .filter(|i| matches!(i, ValidationIssue::UncheckedCheckbox { .. }))
+            .collect();
+        assert_eq!(
+            unchecked_issues.len(),
+            1,
+            "Should find exactly 1 unchecked checkbox"
+        );
+    }
+
+    #[test]
+    fn test_validate_dashboard_context_capture() {
+        let content = r#"# Dashboard
+- [ ] This is a very long task description that should be truncated to 50 characters for context display
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = validate_dashboard_checkboxes(temp_file.path()).unwrap();
+
+        assert!(!result.passed);
+        assert_eq!(result.issues.len(), 1);
+
+        if let ValidationIssue::UncheckedCheckbox { context, .. } = &result.issues[0] {
+            // Context should be truncated to 50 chars
+            assert!(
+                context.len() <= 50,
+                "Context should be truncated to 50 characters"
+            );
+            assert!(context.contains("This is a very long task"));
+        } else {
+            panic!("Expected UncheckedCheckbox issue");
+        }
     }
 }

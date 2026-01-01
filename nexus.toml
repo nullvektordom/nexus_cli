@@ -7,11 +7,11 @@ obsidian_path = "/home/nullvektor/obsidian/execution_helper/Projects/nexus_proje
 [structure]
 planning_dir = "01-PLANNING"
 management_dir = "00-MANAGEMENT"
-sprint_dir = "00-MANAGEMENT/Sprints"
+sprint_dir = "00-MANAGEMENT/sprints"
 
 [gate]
 # We'll use the local sprint file we just created
-heuristics_file = "00-MANAGEMENT/Sprints/sprint-2-gate-command/local-docs/Gate-Heuristics.json"
+heuristics_file = "00-MANAGEMENT/sprints/sprint-2-gate-command/local-docs/Gate-Heuristics.json"
 strict_mode = true
 
 [state]

@@ -11,6 +11,7 @@ toml = "0.8"
 chrono = "0.4"
 anyhow = "1.0"
 pulldown-cmark = "0.12"
+colored = "2.1"
 
 [dev-dependencies]
 assert_cmd = "2.0"

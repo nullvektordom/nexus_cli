@@ -100,7 +100,11 @@ mod tests {
         assert_eq!(heuristics.min_section_length, 50);
         assert_eq!(heuristics.required_headers.len(), 6);
         assert!(heuristics.required_headers.contains(&"Problem".to_string()));
-        assert!(heuristics.required_headers.contains(&"Architecture".to_string()));
+        assert!(
+            heuristics
+                .required_headers
+                .contains(&"Architecture".to_string())
+        );
         assert_eq!(heuristics.illegal_strings.len(), 7);
         assert!(heuristics.illegal_strings.contains(&"TODO".to_string()));
         assert!(heuristics.illegal_strings.contains(&"[ ]".to_string()));
