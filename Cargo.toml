@@ -1,5 +1,5 @@
 [package]
-name = "nexus_cli"
+name = "nexus"
 version = "0.1.0"
 edition = "2024"
 
@@ -14,6 +14,13 @@ pulldown-cmark = "0.12"
 colored = "2.1"
 tera = "1.19"
 git2 = "0.18"
+rustyline = "14.0"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+tokio = { version = "1.0", features = ["full"] }
+qdrant-client = "1.12"
+serde_derive = "1.0"
+notify = "6.1"
+crossbeam-channel = "0.5"
 
 [dev-dependencies]
 assert_cmd = "2.0"
