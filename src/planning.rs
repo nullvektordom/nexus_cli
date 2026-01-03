@@ -465,6 +465,146 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
     Ok(context)
 }
 
+/// Represents a single sprint extracted from MVP breakdown
+#[derive(Debug, Clone, PartialEq)]
+pub struct SprintData {
+    /// Sprint number (e.g., 4)
+    pub number: u32,
+    /// Sprint name/slug (e.g., "the-sprint-orchestrator")
+    pub name: String,
+    /// Sprint title (e.g., "The Sprint Orchestrator (The Leash)")
+    pub title: String,
+    /// Extracted task list as markdown string
+    pub tasks: String,
+    /// Focus statement and exit criteria
+    pub context: String,
+}
+
+/// Parse sprints from 05-MVP-Breakdown.md
+///
+/// Extracts sprint sections with their tasks, focus, and exit criteria.
+/// Uses a simpler line-based approach for reliable extraction.
+///
+/// # Arguments
+/// * `mvp_breakdown_path` - Path to 05-MVP-Breakdown.md
+///
+/// # Returns
+/// * `Ok(Vec<SprintData>)` - List of all sprints found
+/// * `Err` - File could not be read or parsed
+pub fn parse_mvp_sprints(mvp_breakdown_path: &Path) -> Result<Vec<SprintData>> {
+    let content = fs::read_to_string(mvp_breakdown_path)
+        .with_context(|| format!("Failed to read MVP breakdown: {}", mvp_breakdown_path.display()))?;
+
+    let mut sprints = Vec::new();
+    let mut current_sprint: Option<SprintData> = None;
+    let mut current_content = String::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Detect H2 headings (sprint sections)
+        if trimmed.starts_with("## Sprint") {
+            // Save previous sprint
+            if let Some(mut sprint) = current_sprint.take() {
+                extract_tasks_and_context(&mut sprint, &current_content);
+                sprints.push(sprint);
+                current_content.clear();
+            }
+
+            // Start new sprint
+            let header = trimmed.strip_prefix("##").unwrap().trim();
+            current_sprint = parse_sprint_header(header);
+        } else if trimmed.starts_with("## ") {
+            // Other H2 heading - save current sprint if exists
+            if let Some(mut sprint) = current_sprint.take() {
+                extract_tasks_and_context(&mut sprint, &current_content);
+                sprints.push(sprint);
+                current_content.clear();
+            }
+        } else if current_sprint.is_some() {
+            // Collect content for current sprint
+            current_content.push_str(line);
+            current_content.push('\n');
+        }
+    }
+
+    // Save the last sprint
+    if let Some(mut sprint) = current_sprint {
+        extract_tasks_and_context(&mut sprint, &current_content);
+        sprints.push(sprint);
+    }
+
+    Ok(sprints)
+}
+
+/// Parse a sprint header to extract number and name
+///
+/// Examples:
+/// - "Sprint 0: Setup (day 1)" -> (0, "setup", "Setup (day 1)")
+/// - "Sprint 4: The Sprint Orchestrator (The Leash)" -> (4, "the-sprint-orchestrator", "The Sprint Orchestrator (The Leash)")
+fn parse_sprint_header(header: &str) -> Option<SprintData> {
+    // Pattern: "Sprint X: Title"
+    let parts: Vec<&str> = header.splitn(2, ':').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+
+    // Extract sprint number
+    let sprint_prefix = parts[0].trim();
+    let number = sprint_prefix
+        .strip_prefix("Sprint ")
+        .and_then(|s| s.parse::<u32>().ok())?;
+
+    // Extract title and generate slug
+    let title = parts[1].trim().to_string();
+    let name = generate_sprint_slug(&title);
+
+    Some(SprintData {
+        number,
+        name,
+        title,
+        tasks: String::new(),
+        context: String::new(),
+    })
+}
+
+/// Generate a URL-friendly slug from sprint title
+///
+/// "The Sprint Orchestrator (The Leash)" -> "the-sprint-orchestrator"
+fn generate_sprint_slug(title: &str) -> String {
+    // Remove parenthetical suffixes
+    let clean_title = title.split('(').next().unwrap_or(title).trim();
+
+    // Convert to lowercase and replace spaces with hyphens
+    clean_title
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+/// Extract tasks and context from sprint content
+fn extract_tasks_and_context(sprint: &mut SprintData, content: &str) {
+    let mut tasks = Vec::new();
+    let mut context_parts = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        // Detect task lines
+        if trimmed.starts_with("- [x]") || trimmed.starts_with("- [ ]") {
+            tasks.push(trimmed.to_string());
+        }
+        // Detect focus lines (italic emphasis)
+        else if trimmed.starts_with("_Focus:") || trimmed.starts_with("**Exit") {
+            context_parts.push(trimmed.to_string());
+        }
+    }
+
+    sprint.tasks = tasks.join("\n");
+    sprint.context = context_parts.join("\n");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -722,5 +862,130 @@ Another regular list:
         } else {
             panic!("Expected UncheckedCheckbox issue");
         }
+    }
+
+    #[test]
+    fn test_parse_sprint_header() {
+        let result = parse_sprint_header("Sprint 4: The Sprint Orchestrator (The Leash)");
+        assert!(result.is_some());
+
+        let sprint = result.unwrap();
+        assert_eq!(sprint.number, 4);
+        assert_eq!(sprint.name, "the-sprint-orchestrator");
+        assert_eq!(sprint.title, "The Sprint Orchestrator (The Leash)");
+    }
+
+    #[test]
+    fn test_parse_sprint_header_simple() {
+        let result = parse_sprint_header("Sprint 0: Setup (day 1)");
+        assert!(result.is_some());
+
+        let sprint = result.unwrap();
+        assert_eq!(sprint.number, 0);
+        assert_eq!(sprint.name, "setup");
+        assert_eq!(sprint.title, "Setup (day 1)");
+    }
+
+    #[test]
+    fn test_parse_sprint_header_invalid() {
+        assert!(parse_sprint_header("Not a sprint header").is_none());
+        assert!(parse_sprint_header("Sprint X: Invalid").is_none());
+        assert!(parse_sprint_header("Random text").is_none());
+    }
+
+    #[test]
+    fn test_generate_sprint_slug() {
+        assert_eq!(
+            generate_sprint_slug("The Sprint Orchestrator (The Leash)"),
+            "the-sprint-orchestrator"
+        );
+        assert_eq!(generate_sprint_slug("Setup (day 1)"), "setup");
+        assert_eq!(
+            generate_sprint_slug("The Gatekeeper (The Enforcer)"),
+            "the-gatekeeper"
+        );
+        assert_eq!(generate_sprint_slug("Init Command"), "init-command");
+    }
+
+    #[test]
+    fn test_parse_mvp_sprints() {
+        let content = r#"# MVP broken into sprints
+
+## Sprint 0: Setup (day 1)
+- [x] Create nexus repo with Cargo.toml
+- [x] Add clap with derive feature
+- [ ] Create templates/ folder
+**Exit criteria:** `nexus init` all parse
+
+## Sprint 1: Init Command (days 2-3)
+_Focus: Configuration and initialization._
+
+- [x] Implement config.rs to read/write nexus.toml
+- [ ] Implement init command
+**Exit criteria:** `nexus init test-project` creates folder
+
+## Sprint 4: The Sprint Orchestrator (The Leash)
+_Focus: Creating the Tactical Staging Area._
+
+- [ ] **MVP Parser:** Extract specific sprint tasks
+- [ ] **Branching Logic:** Use the `git2` crate
+**Exit criteria:** `nexus sprint X` creates a clean branch
+"#;
+
+        let mut temp_file = NamedTempFile::new().unwrap();
+        temp_file.write_all(content.as_bytes()).unwrap();
+
+        let result = parse_mvp_sprints(temp_file.path()).unwrap();
+
+        assert_eq!(result.len(), 3, "Should parse 3 sprints");
+
+        // Check Sprint 0
+        assert_eq!(result[0].number, 0);
+        assert_eq!(result[0].name, "setup");
+        assert_eq!(result[0].title, "Setup (day 1)");
+        assert!(result[0].tasks.contains("Create nexus repo"));
+        assert!(result[0].context.contains("Exit criteria"));
+
+        // Check Sprint 1
+        assert_eq!(result[1].number, 1);
+        assert_eq!(result[1].name, "init-command");
+        assert!(result[1].tasks.contains("Implement config.rs"));
+        assert!(result[1].context.contains("Focus"));
+
+        // Check Sprint 4
+        assert_eq!(result[2].number, 4);
+        assert_eq!(result[2].name, "the-sprint-orchestrator");
+        assert!(result[2].tasks.contains("MVP Parser"));
+    }
+
+    #[test]
+    fn test_extract_tasks_and_context() {
+        let content = r#"
+_Focus: Test focus statement._
+
+- [x] Task one completed
+- [ ] Task two pending
+- [ ] Task three also pending
+
+Some random text here.
+
+**Exit criteria:** All tests pass
+"#;
+
+        let mut sprint = SprintData {
+            number: 1,
+            name: "test".to_string(),
+            title: "Test Sprint".to_string(),
+            tasks: String::new(),
+            context: String::new(),
+        };
+
+        extract_tasks_and_context(&mut sprint, content);
+
+        assert!(sprint.tasks.contains("Task one completed"));
+        assert!(sprint.tasks.contains("Task two pending"));
+        assert!(sprint.tasks.contains("Task three also pending"));
+        assert!(sprint.context.contains("Focus: Test focus statement"));
+        assert!(sprint.context.contains("Exit criteria"));
     }
 }

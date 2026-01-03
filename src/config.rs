@@ -47,8 +47,16 @@ pub struct ObsidianConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub active_sprint: Option<String>,
+    pub active_sprint: Option<ActiveSprintConfig>,
     pub is_unlocked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveSprintConfig {
+    /// Current sprint identifier (e.g., "sprint-4")
+    pub current: String,
+    /// Sprint status: "in_progress" or "approved"
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
