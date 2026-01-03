@@ -1,13 +1,16 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod brain;
 mod commands;
 mod config;
 mod git_ops;
 mod heuristics;
 mod planning;
 mod scaffolding;
+mod state;
 mod templating;
+mod watcher;
 
 #[derive(Parser)]
 #[command(name = "nexus")]
@@ -41,6 +44,8 @@ enum Commands {
         /// Sprint number to activate
         sprint_number: u32,
     },
+    /// Start an interactive shell (REPL)
+    Shell,
 }
 
 fn main() {
@@ -70,6 +75,12 @@ fn main() {
             sprint_number,
         } => {
             if let Err(e) = commands::sprint::execute(&project_path, sprint_number) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
+        }
+        Commands::Shell => {
+            if let Err(e) = commands::shell::execute() {
                 eprintln!("{}", e);
                 std::process::exit(1);
             }
