@@ -25,8 +25,11 @@ heuristics_file = "Gate-Heuristics.json"
 strict_mode = true
 
 [state]
-active_sprint = "sprint-1"
 is_unlocked = false
+
+[state.active_sprint]
+current = "sprint-1"
+status = "in_progress"
 
 [templates]
 claude_template = "templates/CLAUDE.md.example"
