@@ -6,7 +6,7 @@ use crate::config::{ActiveSprintConfig, NexusConfig};
 use crate::git_ops::create_sprint_branch;
 use crate::planning::parse_mvp_sprints;
 use crate::scaffolding::scaffold_sprint_folder;
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use colored::*;
 use std::fs;
 use std::path::Path;
@@ -26,19 +26,11 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
 
     // Load config from project path
     let config_path = project_path.join("nexus.toml");
-    let config_content = fs::read_to_string(&config_path).with_context(|| {
-        format!(
-            "Failed to read nexus.toml from: {}",
-            project_path.display()
-        )
-    })?;
+    let config_content = fs::read_to_string(&config_path)
+        .with_context(|| format!("Failed to read nexus.toml from: {}", project_path.display()))?;
 
-    let mut config = NexusConfig::from_toml(&config_content).with_context(|| {
-        format!(
-            "Failed to parse config from: {}",
-            config_path.display()
-        )
-    })?;
+    let mut config = NexusConfig::from_toml(&config_content)
+        .with_context(|| format!("Failed to parse config from: {}", config_path.display()))?;
 
     // Resolve planning path (where Obsidian vault lives)
     let planning_path = config.get_planning_path();
@@ -56,38 +48,41 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
     println!();
 
     // Check active sprint status - enforce sequencing
-    if let Some(state) = &config.state {
-        if let Some(active_sprint) = &state.active_sprint {
-            if active_sprint.status != "approved" {
-                println!(
-                    "{}",
-                    "❌ SPRINT BLOCKED: Previous sprint not approved"
-                        .bright_red()
-                        .bold()
-                );
-                println!();
-                println!(
-                    "{}",
-                    format!("  Current active sprint: {}", active_sprint.current).bright_yellow()
-                );
-                println!(
-                    "{}",
-                    format!("  Status: {}", active_sprint.status).bright_yellow()
-                );
-                println!();
-                println!(
-                    "{}",
-                    "You must complete and approve the current sprint before starting a new one."
-                        .white()
-                );
-                bail!("Cannot start Sprint {} until previous sprint is approved. Please complete the current sprint first.", sprint_number);
-            }
-        }
+    if let Some(state) = &config.state
+        && let Some(active_sprint) = &state.active_sprint
+        && active_sprint.status != "approved"
+    {
+        println!(
+            "{}",
+            "❌ SPRINT BLOCKED: Previous sprint not approved"
+                .bright_red()
+                .bold()
+        );
+        println!();
+        println!(
+            "{}",
+            format!("  Current active sprint: {}", active_sprint.current).bright_yellow()
+        );
+        println!(
+            "{}",
+            format!("  Status: {}", active_sprint.status).bright_yellow()
+        );
+        println!();
+        println!(
+            "{}",
+            "You must complete and approve the current sprint before starting a new one.".white()
+        );
+        bail!(
+            "Cannot start Sprint {} until previous sprint is approved. Please complete the current sprint first.",
+            sprint_number
+        );
     }
 
     // Parse sprint data from MVP breakdown
     println!("{}", "📖 Parsing MVP breakdown...".bright_blue());
-    let mvp_path = planning_path.join("01-PLANNING").join("05-MVP-Breakdown.md");
+    let mvp_path = planning_path
+        .join("01-PLANNING")
+        .join("05-MVP-Breakdown.md");
 
     if !mvp_path.exists() {
         bail!(
@@ -96,8 +91,8 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
         );
     }
 
-    let sprints = parse_mvp_sprints(&mvp_path)
-        .context("Failed to parse sprints from MVP breakdown")?;
+    let sprints =
+        parse_mvp_sprints(&mvp_path).context("Failed to parse sprints from MVP breakdown")?;
 
     // Find the requested sprint
     let sprint_data = sprints

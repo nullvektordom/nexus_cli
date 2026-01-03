@@ -9,7 +9,7 @@
 
 use crate::brain::{NexusBrain, VectorMetadata};
 use anyhow::{Context, Result};
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender, bounded};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::fs;
@@ -95,7 +95,9 @@ impl SentinelWatcher {
             .context("Failed to send shutdown message")?;
 
         if let Some(handle) = self.thread_handle.take() {
-            handle.join().map_err(|_| anyhow::anyhow!("Failed to join watcher thread"))?;
+            handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("Failed to join watcher thread"))?;
         }
 
         Ok(())
@@ -104,7 +106,7 @@ impl SentinelWatcher {
 
 /// Main watcher loop running in background thread
 fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<()> {
-    let mut current_watcher: Option<notify::RecommendedWatcher> = None;
+    let mut _current_watcher: Option<notify::RecommendedWatcher> = None;
     let mut current_project: Option<String> = None;
     let watched_paths: Arc<Mutex<HashSet<PathBuf>>> = Arc::new(Mutex::new(HashSet::new()));
 
@@ -123,16 +125,17 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
                     println!("🔍 Sentinel: Starting watch for project '{}'", project_id);
 
                     // Stop existing watcher
-                    current_watcher = None;
+                    _current_watcher = None;
 
                     // Create new watcher
                     let event_tx_clone = event_tx.clone();
-                    let mut watcher = notify::recommended_watcher(move |res: notify::Result<Event>| {
-                        if let Ok(event) = res {
-                            let _ = event_tx_clone.send(event);
-                        }
-                    })
-                    .context("Failed to create file watcher")?;
+                    let mut watcher =
+                        notify::recommended_watcher(move |res: notify::Result<Event>| {
+                            if let Ok(event) = res {
+                                let _ = event_tx_clone.send(event);
+                            }
+                        })
+                        .context("Failed to create file watcher")?;
 
                     // Watch repo path
                     if repo_path.exists() {
@@ -150,7 +153,7 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
                         println!("  ✓ Watching: {}", obsidian_path.display());
                     }
 
-                    current_watcher = Some(watcher);
+                    _current_watcher = Some(watcher);
                     current_project = Some(project_id);
 
                     // Clear watched paths
@@ -158,7 +161,7 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
                 }
                 WatcherMessage::StopWatching => {
                     println!("🔍 Sentinel: Stopping watch");
-                    current_watcher = None;
+                    _current_watcher = None;
                     current_project = None;
                     watched_paths.lock().unwrap().clear();
                 }
@@ -170,12 +173,11 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
         }
 
         // Process file system events
-        if let Ok(event) = event_rx.try_recv() {
-            if let Some(ref project_id) = current_project {
-                if let Err(e) = handle_file_event(&event, project_id, &brain_url, &watched_paths) {
-                    eprintln!("Error handling file event: {}", e);
-                }
-            }
+        if let Ok(event) = event_rx.try_recv()
+            && let Some(ref project_id) = current_project
+            && let Err(e) = handle_file_event(&event, project_id, &brain_url, &watched_paths)
+        {
+            eprintln!("Error handling file event: {}", e);
         }
 
         // Sleep briefly to avoid busy-waiting
@@ -214,13 +216,17 @@ fn handle_file_event(
         }
 
         // Check if this is Architecture.md
-        let is_architecture = path.file_name()
+        let is_architecture = path
+            .file_name()
             .and_then(|n| n.to_str())
             .map(|n| n == "04-Architecture.md")
             .unwrap_or(false);
 
         if is_architecture {
-            println!("🧠 Architecture.md changed - triggering full re-index for {}", project_id);
+            println!(
+                "🧠 Architecture.md changed - triggering full re-index for {}",
+                project_id
+            );
             // TODO: Implement full project re-index
         }
 

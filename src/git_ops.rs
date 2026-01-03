@@ -3,8 +3,8 @@
 //! Provides utilities for creating and managing sprint branches using git2.
 
 use anyhow::{Context, Result, bail};
-use git2::{Repository, BranchType};
-use std::path::{Path, PathBuf};
+use git2::{BranchType, Repository};
+use std::path::Path;
 
 /// Create a new sprint branch and switch to it
 ///
@@ -22,11 +22,7 @@ use std::path::{Path, PathBuf};
 /// - Branch name must not already exist
 /// - Creates branch from current HEAD
 /// - Automatically switches to the new branch
-pub fn create_sprint_branch(
-    repo_path: &Path,
-    sprint_number: u32,
-    sprint_name: &str,
-) -> Result<()> {
+pub fn create_sprint_branch(repo_path: &Path, sprint_number: u32, sprint_name: &str) -> Result<()> {
     // Open repository
     let repo = Repository::open(repo_path)
         .with_context(|| format!("Failed to open git repository at: {}", repo_path.display()))?;
@@ -46,9 +42,9 @@ pub fn create_sprint_branch(
     }
 
     // Get current HEAD commit
-    let head = repo.head()
-        .context("Failed to get HEAD reference")?;
-    let head_commit = head.peel_to_commit()
+    let head = repo.head().context("Failed to get HEAD reference")?;
+    let head_commit = head
+        .peel_to_commit()
         .context("Failed to peel HEAD to commit")?;
 
     // Create new branch
@@ -63,7 +59,8 @@ pub fn create_sprint_branch(
 
 /// Check if the working directory is clean (no uncommitted changes)
 fn ensure_clean_working_directory(repo: &Repository) -> Result<()> {
-    let statuses = repo.statuses(None)
+    let statuses = repo
+        .statuses(None)
         .context("Failed to get repository status")?;
 
     if !statuses.is_empty() {
@@ -95,11 +92,13 @@ fn branch_exists(repo: &Repository, branch_name: &str) -> Result<bool> {
 /// Checkout a branch by name
 fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
     // Find the branch
-    let branch = repo.find_branch(branch_name, BranchType::Local)
+    let branch = repo
+        .find_branch(branch_name, BranchType::Local)
         .with_context(|| format!("Failed to find branch '{}'", branch_name))?;
 
     // Get the reference
-    let branch_ref = branch.get()
+    let branch_ref = branch
+        .get()
         .name()
         .context("Failed to get branch reference name")?;
 
@@ -118,6 +117,7 @@ fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// Helper to create a test git repository with an initial commit
@@ -230,9 +230,8 @@ mod tests {
         let repo = Repository::open(&repo_path).unwrap();
 
         // Check non-existent branch
-        assert_eq!(
-            branch_exists(&repo, "nonexistent").unwrap(),
-            false,
+        assert!(
+            !branch_exists(&repo, "nonexistent").unwrap(),
             "Non-existent branch should return false"
         );
 
@@ -240,9 +239,8 @@ mod tests {
         create_sprint_branch(&repo_path, 1, "test").unwrap();
 
         // Check existing branch
-        assert_eq!(
+        assert!(
             branch_exists(&repo, "sprint-1-test").unwrap(),
-            true,
             "Existing branch should return true"
         );
     }

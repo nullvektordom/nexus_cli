@@ -10,9 +10,8 @@
 use anyhow::{Context, Result};
 use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    CreateCollectionBuilder, Distance, VectorParamsBuilder, PointStruct,
-    UpsertPointsBuilder, GetCollectionInfoResponse, Value,
-    SearchPointsBuilder, ScoredPoint, Condition, Filter,
+    Condition, CreateCollectionBuilder, Distance, Filter, GetCollectionInfoResponse, PointStruct,
+    ScoredPoint, SearchPointsBuilder, UpsertPointsBuilder, Value, VectorParamsBuilder,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -66,7 +65,10 @@ impl VectorMetadata {
         let mut payload = HashMap::new();
         payload.insert("project_id".to_string(), self.project_id.clone().into());
         payload.insert("file_path".to_string(), self.file_path.clone().into());
-        payload.insert("sprint_context".to_string(), self.sprint_context.clone().into());
+        payload.insert(
+            "sprint_context".to_string(),
+            self.sprint_context.clone().into(),
+        );
 
         if let Some(ref file_type) = self.file_type {
             payload.insert("file_type".to_string(), file_type.clone().into());
@@ -113,7 +115,10 @@ impl NexusBrain {
     /// Ensure the nexus_brain collection exists with the correct schema
     pub async fn ensure_collection(&self) -> Result<()> {
         // Check if collection exists
-        let exists = self.client.collection_exists(COLLECTION_NAME).await
+        let exists = self
+            .client
+            .collection_exists(COLLECTION_NAME)
+            .await
             .context("Failed to check if collection exists")?;
 
         if !exists {
@@ -121,9 +126,10 @@ impl NexusBrain {
             self.client
                 .create_collection(
                     CreateCollectionBuilder::new(COLLECTION_NAME)
-                        .vectors_config(VectorParamsBuilder::new(VECTOR_SIZE, Distance::Cosine)
-                            .on_disk(true))
-                        .on_disk_payload(true)
+                        .vectors_config(
+                            VectorParamsBuilder::new(VECTOR_SIZE, Distance::Cosine).on_disk(true),
+                        )
+                        .on_disk_payload(true),
                 )
                 .await
                 .context("Failed to create collection")?;
@@ -134,7 +140,8 @@ impl NexusBrain {
 
     /// Get collection information and stats
     pub async fn get_collection_info(&self) -> Result<GetCollectionInfoResponse> {
-        let info = self.client
+        let info = self
+            .client
             .collection_info(COLLECTION_NAME)
             .await
             .context("Failed to get collection info")?;
@@ -146,7 +153,9 @@ impl NexusBrain {
     pub async fn health_check(&self) -> Result<BrainHealth> {
         // Get collection info to verify connection
         let response = self.get_collection_info().await?;
-        let info = response.result.ok_or_else(|| anyhow::anyhow!("No collection info in response"))?;
+        let info = response
+            .result
+            .ok_or_else(|| anyhow::anyhow!("No collection info in response"))?;
 
         Ok(BrainHealth {
             online: true,
@@ -180,11 +189,7 @@ impl NexusBrain {
             );
         }
 
-        let point = PointStruct::new(
-            id,
-            vector,
-            metadata.to_payload(),
-        );
+        let point = PointStruct::new(id, vector, metadata.to_payload());
 
         self.client
             .upsert_points(UpsertPointsBuilder::new(COLLECTION_NAME, vec![point]))
@@ -212,36 +217,33 @@ impl NexusBrain {
         let mut conditions = Vec::new();
 
         if let Some(pid) = project_id {
-            conditions.push(Condition::matches(
-                "project_id",
-                pid.to_string(),
-            ));
+            conditions.push(Condition::matches("project_id", pid.to_string()));
         }
 
         if let Some(pattern) = file_pattern {
-            conditions.push(Condition::matches(
-                "file_path",
-                pattern.to_string(),
-            ));
+            conditions.push(Condition::matches("file_path", pattern.to_string()));
         }
 
         // Build search request
-        let mut search_builder = SearchPointsBuilder::new(COLLECTION_NAME, query_vector, limit)
-            .with_payload(true);
+        let mut search_builder =
+            SearchPointsBuilder::new(COLLECTION_NAME, query_vector, limit).with_payload(true);
 
         if !conditions.is_empty() {
             search_builder = search_builder.filter(Filter::must(conditions));
         }
 
         // Execute search
-        let results = self.client
+        let results = self
+            .client
             .search_points(search_builder)
             .await
             .context("Failed to search points")?;
 
         // Convert to SearchResult
-        let search_results = results.result.into_iter()
-            .map(|scored_point| SearchResult::from_scored_point(scored_point))
+        let search_results = results
+            .result
+            .into_iter()
+            .map(SearchResult::from_scored_point)
             .collect();
 
         Ok(search_results)
@@ -254,8 +256,13 @@ impl NexusBrain {
         project_id: &str,
         limit: u64,
     ) -> Result<Vec<SearchResult>> {
-        self.search(query_vector, limit, Some(project_id), Some("Architecture.md"))
-            .await
+        self.search(
+            query_vector,
+            limit,
+            Some(project_id),
+            Some("Architecture.md"),
+        )
+        .await
     }
 }
 
@@ -265,8 +272,10 @@ pub struct SearchResult {
     pub score: f32,
     pub file_path: String,
     pub content: String,
+    #[allow(dead_code)]
     pub project_id: Option<String>,
     pub file_type: Option<String>,
+    #[allow(dead_code)]
     pub chunk_index: Option<u32>,
 }
 
@@ -275,30 +284,28 @@ impl SearchResult {
     fn from_scored_point(point: ScoredPoint) -> Self {
         let payload = point.payload;
 
-        let file_path = payload.get("file_path")
+        let file_path = payload
+            .get("file_path")
             .and_then(|v| match &v.kind {
                 Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(s.clone()),
                 _ => None,
             })
             .unwrap_or_else(|| "unknown".to_string());
 
-        let project_id = payload.get("project_id")
-            .and_then(|v| match &v.kind {
-                Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(s.clone()),
-                _ => None,
-            });
+        let project_id = payload.get("project_id").and_then(|v| match &v.kind {
+            Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(s.clone()),
+            _ => None,
+        });
 
-        let file_type = payload.get("file_type")
-            .and_then(|v| match &v.kind {
-                Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(s.clone()),
-                _ => None,
-            });
+        let file_type = payload.get("file_type").and_then(|v| match &v.kind {
+            Some(qdrant_client::qdrant::value::Kind::StringValue(s)) => Some(s.clone()),
+            _ => None,
+        });
 
-        let chunk_index = payload.get("chunk_index")
-            .and_then(|v| match &v.kind {
-                Some(qdrant_client::qdrant::value::Kind::IntegerValue(i)) => Some(*i as u32),
-                _ => None,
-            });
+        let chunk_index = payload.get("chunk_index").and_then(|v| match &v.kind {
+            Some(qdrant_client::qdrant::value::Kind::IntegerValue(i)) => Some(*i as u32),
+            _ => None,
+        });
 
         // For now, we don't have the actual content stored in payload
         // In production, you'd want to store it or retrieve from original file
@@ -315,11 +322,14 @@ impl SearchResult {
     }
 
     /// Format as a citation string
+    #[allow(dead_code)]
     pub fn format_citation(&self) -> String {
         format!(
             "From {}{}: {}",
             self.file_path,
-            self.chunk_index.map(|i| format!(" (chunk {})", i)).unwrap_or_default(),
+            self.chunk_index
+                .map(|i| format!(" (chunk {})", i))
+                .unwrap_or_default(),
             self.content
         )
     }
@@ -337,6 +347,7 @@ impl SearchResult {
 /// Health status of the Nexus brain
 #[derive(Debug, Clone)]
 pub struct BrainHealth {
+    #[allow(dead_code)]
     pub online: bool,
     pub collection_name: String,
     pub points_count: u64,

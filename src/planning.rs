@@ -62,6 +62,7 @@ impl ValidationResult {
     }
 
     /// Checks if the result has any issues
+    #[allow(dead_code)]
     pub fn has_issues(&self) -> bool {
         !self.issues.is_empty()
     }
@@ -393,8 +394,8 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
     // Parse 02-Scope-and-Boundaries.md
     let scope_path = planning_dir.join("02-Scope-and-Boundaries.md");
     if scope_path.exists() {
-        let content = fs::read_to_string(&scope_path)
-            .context("Failed to read 02-Scope-and-Boundaries.md")?;
+        let content =
+            fs::read_to_string(&scope_path).context("Failed to read 02-Scope-and-Boundaries.md")?;
         let sections = extract_sections(&content);
 
         if let Some(mvp) = sections.get("MVP (Minimum Viable Product):") {
@@ -404,7 +405,7 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
             if !context.anti_scope.is_empty() {
                 context.anti_scope.push_str("\n\n");
             }
-            context.anti_scope.push_str(&never);
+            context.anti_scope.push_str(never);
         }
         if let Some(constraints) = sections.get("Tech constraints:") {
             context.tech_constraints = constraints.clone();
@@ -414,8 +415,8 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
     // Parse 03-Tech-Stack.md
     let tech_stack_path = planning_dir.join("03-Tech-Stack.md");
     if tech_stack_path.exists() {
-        let content = fs::read_to_string(&tech_stack_path)
-            .context("Failed to read 03-Tech-Stack.md")?;
+        let content =
+            fs::read_to_string(&tech_stack_path).context("Failed to read 03-Tech-Stack.md")?;
         let sections = extract_sections(&content);
 
         if let Some(stack) = sections.get("Stack (force yourself to choose NOW):") {
@@ -435,8 +436,8 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
     // Parse 04-Architecture.md
     let arch_path = planning_dir.join("04-Architecture.md");
     if arch_path.exists() {
-        let content = fs::read_to_string(&arch_path)
-            .context("Failed to read 04-Architecture.md")?;
+        let content =
+            fs::read_to_string(&arch_path).context("Failed to read 04-Architecture.md")?;
         let sections = extract_sections(&content);
 
         if let Some(folder) = sections.get("Folder structure:") {
@@ -456,8 +457,8 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
     // Parse 05-MVP-Breakdown.md
     let mvp_path = planning_dir.join("05-MVP-Breakdown.md");
     if mvp_path.exists() {
-        let content = fs::read_to_string(&mvp_path)
-            .context("Failed to read 05-MVP-Breakdown.md")?;
+        let content =
+            fs::read_to_string(&mvp_path).context("Failed to read 05-MVP-Breakdown.md")?;
         // For MVP breakdown, we want the whole document
         context.mvp_breakdown = content;
     }
@@ -492,8 +493,12 @@ pub struct SprintData {
 /// * `Ok(Vec<SprintData>)` - List of all sprints found
 /// * `Err` - File could not be read or parsed
 pub fn parse_mvp_sprints(mvp_breakdown_path: &Path) -> Result<Vec<SprintData>> {
-    let content = fs::read_to_string(mvp_breakdown_path)
-        .with_context(|| format!("Failed to read MVP breakdown: {}", mvp_breakdown_path.display()))?;
+    let content = fs::read_to_string(mvp_breakdown_path).with_context(|| {
+        format!(
+            "Failed to read MVP breakdown: {}",
+            mvp_breakdown_path.display()
+        )
+    })?;
 
     let mut sprints = Vec::new();
     let mut current_sprint: Option<SprintData> = None;
