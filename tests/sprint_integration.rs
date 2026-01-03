@@ -3,13 +3,13 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Helper to create nexus.toml config
 fn create_nexus_config(
-    project_path: &PathBuf,
-    vault_path: &PathBuf,
+    project_path: &Path,
+    vault_path: &Path,
     sprint_status: Option<(&str, &str)>,
 ) {
     let vault_path_str = vault_path.to_str().unwrap();
@@ -53,7 +53,7 @@ claude_template = "templates/CLAUDE.md.example"
 }
 
 /// Helper to create MVP breakdown file with test sprints
-fn create_mvp_breakdown(planning_dir: &PathBuf) {
+fn create_mvp_breakdown(planning_dir: &Path) {
     let mvp_content = r#"# MVP broken into sprints
 
 ## Sprint 0: Setup (day 1)
@@ -128,7 +128,7 @@ fn test_sprint_command_creates_branch_and_folders() {
     let project_path = temp_dir.path();
 
     // Create initial files BEFORE git init
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf(), None);
+    create_nexus_config(project_path, project_path, None);
 
     // Create planning directory with MVP breakdown
     let planning_dir = project_path.join("01-PLANNING");
@@ -142,10 +142,8 @@ fn test_sprint_command_creates_branch_and_folders() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
-    cmd.arg("sprint")
-        .arg(project_path)
-        .arg("4");
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
         .success()
@@ -192,8 +190,14 @@ fn test_sprint_command_creates_branch_and_folders() {
     );
 
     // Verify folders were created
-    assert!(sprint_folder.join("approvals").exists(), "approvals/ should exist");
-    assert!(sprint_folder.join("sessions").exists(), "sessions/ should exist");
+    assert!(
+        sprint_folder.join("approvals").exists(),
+        "approvals/ should exist"
+    );
+    assert!(
+        sprint_folder.join("sessions").exists(),
+        "sessions/ should exist"
+    );
 
     // Verify config was updated
     let config_content = fs::read_to_string(project_path.join("nexus.toml")).unwrap();
@@ -214,8 +218,8 @@ fn test_sprint_command_fails_if_previous_not_approved() {
 
     // Create files before git init
     create_nexus_config(
-        &project_path.to_path_buf(),
-        &project_path.to_path_buf(),
+        project_path,
+        project_path,
         Some(("sprint-3", "in_progress")),
     );
 
@@ -230,10 +234,8 @@ fn test_sprint_command_fails_if_previous_not_approved() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
-    cmd.arg("sprint")
-        .arg(project_path)
-        .arg("4");
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
         .failure()
@@ -247,11 +249,7 @@ fn test_sprint_command_succeeds_if_previous_approved() {
     let project_path = temp_dir.path();
 
     // Create files before git init
-    create_nexus_config(
-        &project_path.to_path_buf(),
-        &project_path.to_path_buf(),
-        Some(("sprint-3", "approved")),
-    );
+    create_nexus_config(project_path, project_path, Some(("sprint-3", "approved")));
 
     // Create planning directory with MVP breakdown
     let planning_dir = project_path.join("01-PLANNING");
@@ -264,10 +262,8 @@ fn test_sprint_command_succeeds_if_previous_approved() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
-    cmd.arg("sprint")
-        .arg(project_path)
-        .arg("4");
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
         .success()
@@ -280,7 +276,7 @@ fn test_sprint_command_fails_with_dirty_working_directory() {
     let project_path = temp_dir.path();
 
     // Create files before git init
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf(), None);
+    create_nexus_config(project_path, project_path, None);
 
     // Create planning directory with MVP breakdown
     let planning_dir = project_path.join("01-PLANNING");
@@ -296,10 +292,8 @@ fn test_sprint_command_fails_with_dirty_working_directory() {
     fs::write(project_path.join("dirty.txt"), "uncommitted").unwrap();
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
-    cmd.arg("sprint")
-        .arg(project_path)
-        .arg("4");
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
         .failure()
@@ -312,7 +306,7 @@ fn test_sprint_command_fails_with_invalid_sprint_number() {
     let project_path = temp_dir.path();
 
     // Create files before git init
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf(), None);
+    create_nexus_config(project_path, project_path, None);
 
     // Create planning directory with MVP breakdown
     let planning_dir = project_path.join("01-PLANNING");
@@ -325,10 +319,8 @@ fn test_sprint_command_fails_with_invalid_sprint_number() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command with non-existent sprint number
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
-    cmd.arg("sprint")
-        .arg(project_path)
-        .arg("99");
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    cmd.arg("sprint").arg(project_path).arg("99");
 
     cmd.assert()
         .failure()

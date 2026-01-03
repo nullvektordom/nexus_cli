@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 /// Helper to create a command instance for nexus_cli
 fn nexus_cmd() -> Command {
-    Command::cargo_bin("nexus_cli").expect("Failed to find binary")
+    Command::cargo_bin("nexus").expect("Failed to find binary")
 }
 
 #[test]

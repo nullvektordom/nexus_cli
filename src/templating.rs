@@ -91,7 +91,10 @@ mod tests {
         assert!(claude_path.exists(), "CLAUDE.md was not created");
 
         let content = std::fs::read_to_string(&claude_path).unwrap();
-        assert!(content.contains("TestProject"), "Content missing project name");
+        assert!(
+            content.contains("TestProject"),
+            "Content missing project name"
+        );
         assert!(
             content.contains("Solve a test problem"),
             "Content missing problem statement"

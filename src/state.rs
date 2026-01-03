@@ -63,11 +63,13 @@ impl NexusState {
     /// Returns a new state if the file doesn't exist
     pub fn load(state_file_path: &Path) -> Result<Self> {
         if state_file_path.exists() {
-            let content = fs::read_to_string(state_file_path)
-                .with_context(|| format!("Failed to read state file: {}", state_file_path.display()))?;
+            let content = fs::read_to_string(state_file_path).with_context(|| {
+                format!("Failed to read state file: {}", state_file_path.display())
+            })?;
 
-            let mut state: NexusState = serde_json::from_str(&content)
-                .with_context(|| format!("Failed to parse state file: {}", state_file_path.display()))?;
+            let mut state: NexusState = serde_json::from_str(&content).with_context(|| {
+                format!("Failed to parse state file: {}", state_file_path.display())
+            })?;
 
             // Update the last_updated timestamp
             state.last_updated = chrono::Utc::now().to_rfc3339();
@@ -82,15 +84,16 @@ impl NexusState {
     pub fn save(&self, state_file_path: &Path) -> Result<()> {
         // Ensure the parent directory exists
         if let Some(parent) = state_file_path.parent() {
-            fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create state directory: {}", parent.display()))?;
+            fs::create_dir_all(parent).with_context(|| {
+                format!("Failed to create state directory: {}", parent.display())
+            })?;
         }
 
-        let content = serde_json::to_string_pretty(self)
-            .context("Failed to serialize state")?;
+        let content = serde_json::to_string_pretty(self).context("Failed to serialize state")?;
 
-        fs::write(state_file_path, content)
-            .with_context(|| format!("Failed to write state file: {}", state_file_path.display()))?;
+        fs::write(state_file_path, content).with_context(|| {
+            format!("Failed to write state file: {}", state_file_path.display())
+        })?;
 
         Ok(())
     }
@@ -107,6 +110,7 @@ impl NexusState {
     }
 
     /// Clear the active project
+    #[allow(dead_code)]
     pub fn clear_active_project(&mut self) {
         self.active_project_id = None;
         self.touch();
@@ -114,18 +118,26 @@ impl NexusState {
 
     /// Get the path to the active project's repository
     pub fn get_active_repo_path(&self) -> Option<PathBuf> {
-        self.active_project_id.as_ref().map(|id| self.repos_root.join(id))
+        self.active_project_id
+            .as_ref()
+            .map(|id| self.repos_root.join(id))
     }
 
     /// Get the path to the active project in Obsidian vault
     pub fn get_active_obsidian_path(&self) -> Option<PathBuf> {
-        self.active_project_id.as_ref().map(|id| self.obsidian_vault_root.join(id))
+        self.active_project_id
+            .as_ref()
+            .map(|id| self.obsidian_vault_root.join(id))
     }
 
     /// Get the path to the active project's session file
+    #[allow(dead_code)]
     pub fn get_project_session_path(&self) -> Option<PathBuf> {
-        self.get_active_obsidian_path()
-            .map(|p| p.join("00-MANAGEMENT").join(".nexus_state").join("session.json"))
+        self.get_active_obsidian_path().map(|p| {
+            p.join("00-MANAGEMENT")
+                .join(".nexus_state")
+                .join("session.json")
+        })
     }
 
     /// Validate that a project exists in both repos and obsidian vault
@@ -169,7 +181,10 @@ mod tests {
         let state = NexusState::new();
 
         assert!(state.active_project_id.is_none());
-        assert_eq!(state.obsidian_vault_root, PathBuf::from(DEFAULT_OBSIDIAN_ROOT));
+        assert_eq!(
+            state.obsidian_vault_root,
+            PathBuf::from(DEFAULT_OBSIDIAN_ROOT)
+        );
         assert_eq!(state.repos_root, PathBuf::from(DEFAULT_REPOS_ROOT));
         assert!(!state.session_id.is_empty());
         assert!(!state.created_at.is_empty());
@@ -190,7 +205,10 @@ mod tests {
         let loaded_state = NexusState::load(&state_file).unwrap();
 
         assert_eq!(loaded_state.session_id, original_state.session_id);
-        assert_eq!(loaded_state.active_project_id, Some("test_project".to_string()));
+        assert_eq!(
+            loaded_state.active_project_id,
+            Some("test_project".to_string())
+        );
         assert_eq!(loaded_state.created_at, original_state.created_at);
     }
 
@@ -218,7 +236,9 @@ mod tests {
 
         assert_eq!(
             state.get_active_obsidian_path(),
-            Some(PathBuf::from("/home/nullvektor/obsidian/execution_helper/Projects/nexus_cli"))
+            Some(PathBuf::from(
+                "/home/nullvektor/obsidian/execution_helper/Projects/nexus_cli"
+            ))
         );
     }
 }

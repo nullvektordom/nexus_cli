@@ -1,13 +1,13 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 // Helper functions removed - using direct TempDir creation in tests instead
 
 /// Helper to create nexus.toml config
-fn create_nexus_config(project_path: &PathBuf, vault_path: &PathBuf) {
+fn create_nexus_config(project_path: &Path, vault_path: &Path) {
     let vault_path_str = vault_path.to_str().unwrap();
     let config_content = format!(
         r#"[project]
@@ -40,7 +40,7 @@ claude_template = "templates/CLAUDE.md.example"
 }
 
 /// Helper to create heuristics file
-fn create_heuristics(project_path: &PathBuf) {
+fn create_heuristics(project_path: &Path) {
     let heuristics_content = r#"{
   "min_section_length": 50,
   "required_headers": [
@@ -133,8 +133,8 @@ fn test_gate_passes_with_valid_documents() {
     let project_path = temp_dir.path();
 
     // Setup project structure
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf());
-    create_heuristics(&project_path.to_path_buf());
+    create_nexus_config(project_path, project_path);
+    create_heuristics(project_path);
 
     let planning_dir = project_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -145,7 +145,7 @@ fn test_gate_passes_with_valid_documents() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -160,8 +160,8 @@ fn test_gate_fails_with_invalid_planning_docs() {
     let project_path = temp_dir.path();
 
     // Setup project structure
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf());
-    create_heuristics(&project_path.to_path_buf());
+    create_nexus_config(project_path, project_path);
+    create_heuristics(project_path);
 
     let planning_dir = project_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -172,7 +172,7 @@ fn test_gate_fails_with_invalid_planning_docs() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -187,8 +187,8 @@ fn test_gate_fails_with_unchecked_dashboard() {
     let project_path = temp_dir.path();
 
     // Setup project structure
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf());
-    create_heuristics(&project_path.to_path_buf());
+    create_nexus_config(project_path, project_path);
+    create_heuristics(project_path);
 
     let planning_dir = project_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -199,7 +199,7 @@ fn test_gate_fails_with_unchecked_dashboard() {
     create_invalid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -214,8 +214,8 @@ fn test_gate_shows_context_for_issues() {
     let project_path = temp_dir.path();
 
     // Setup project structure
-    create_nexus_config(&project_path.to_path_buf(), &project_path.to_path_buf());
-    create_heuristics(&project_path.to_path_buf());
+    create_nexus_config(project_path, project_path);
+    create_heuristics(project_path);
 
     let planning_dir = project_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -226,7 +226,7 @@ fn test_gate_shows_context_for_issues() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -243,7 +243,7 @@ fn test_gate_fails_with_missing_config() {
     // Don't create config file
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
