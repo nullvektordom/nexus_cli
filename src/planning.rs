@@ -259,6 +259,212 @@ pub fn validate_dashboard_checkboxes(file_path: &Path) -> Result<ValidationResul
     Ok(result)
 }
 
+/// Context extracted from planning documents for template rendering
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PlanningContext {
+    pub project_name: String,
+    pub problem_statement: String,
+    pub vision: String,
+    pub problem_details: String,
+    pub mvp_scope: String,
+    pub anti_scope: String,
+    pub tech_constraints: String,
+    pub tech_stack: String,
+    pub stack_justification: String,
+    pub tech_exclusions: String,
+    pub dependencies: String,
+    pub folder_structure: String,
+    pub data_model: String,
+    pub user_flow: String,
+    pub technical_decisions: String,
+    pub mvp_breakdown: String,
+    pub generation_date: String,
+}
+
+impl PlanningContext {
+    /// Create a new empty planning context
+    pub fn new(project_name: String) -> Self {
+        Self {
+            project_name,
+            problem_statement: String::new(),
+            vision: String::new(),
+            problem_details: String::new(),
+            mvp_scope: String::new(),
+            anti_scope: String::new(),
+            tech_constraints: String::new(),
+            tech_stack: String::new(),
+            stack_justification: String::new(),
+            tech_exclusions: String::new(),
+            dependencies: String::new(),
+            folder_structure: String::new(),
+            data_model: String::new(),
+            user_flow: String::new(),
+            technical_decisions: String::new(),
+            mvp_breakdown: String::new(),
+            generation_date: chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string(),
+        }
+    }
+}
+
+/// Extract sections from a markdown file as a HashMap
+fn extract_sections(content: &str) -> HashMap<String, String> {
+    let parser = Parser::new(content);
+    let mut sections: HashMap<String, String> = HashMap::new();
+
+    let mut current_header: Option<String> = None;
+    let mut current_content: Vec<String> = Vec::new();
+    let mut in_header = false;
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Heading { .. }) => {
+                // Save previous section
+                if let Some(header) = current_header.take() {
+                    sections.insert(header, current_content.join(" ").trim().to_string());
+                    current_content.clear();
+                }
+                in_header = true;
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                in_header = false;
+            }
+            Event::Text(text) => {
+                if in_header {
+                    current_header = Some(text.to_string());
+                } else if current_header.is_some() {
+                    current_content.push(text.to_string());
+                }
+            }
+            Event::Code(code) => {
+                if !in_header && current_header.is_some() {
+                    current_content.push(format!("`{}`", code));
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                if !in_header && current_header.is_some() {
+                    current_content.push("\n".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Save final section
+    if let Some(header) = current_header {
+        sections.insert(header, current_content.join(" ").trim().to_string());
+    }
+
+    sections
+}
+
+/// Parse planning documents and extract content for template
+pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> {
+    // Get project name from parent directory or default
+    let project_name = planning_dir
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("Project")
+        .to_string();
+
+    let mut context = PlanningContext::new(project_name);
+
+    // Parse 01-Problem-and-Vision.md
+    let problem_vision_path = planning_dir.join("01-Problem-and-Vision.md");
+    if problem_vision_path.exists() {
+        let content = fs::read_to_string(&problem_vision_path)
+            .context("Failed to read 01-Problem-and-Vision.md")?;
+        let sections = extract_sections(&content);
+
+        if let Some(solution) = sections.get("Solution in ONE SENTENCE:") {
+            context.problem_statement = solution.clone();
+        }
+        if let Some(success) = sections.get("Success criteria (3 months):") {
+            context.vision = success.clone();
+        }
+        if let Some(problem) = sections.get("My problem (personal):") {
+            context.problem_details = problem.clone();
+        }
+        if let Some(anti) = sections.get("Anti-vision (what this project is NOT):") {
+            context.anti_scope = anti.clone();
+        }
+    }
+
+    // Parse 02-Scope-and-Boundaries.md
+    let scope_path = planning_dir.join("02-Scope-and-Boundaries.md");
+    if scope_path.exists() {
+        let content = fs::read_to_string(&scope_path)
+            .context("Failed to read 02-Scope-and-Boundaries.md")?;
+        let sections = extract_sections(&content);
+
+        if let Some(mvp) = sections.get("MVP (Minimum Viable Product):") {
+            context.mvp_scope = mvp.clone();
+        }
+        if let Some(never) = sections.get("Never (things I will NOT build):") {
+            if !context.anti_scope.is_empty() {
+                context.anti_scope.push_str("\n\n");
+            }
+            context.anti_scope.push_str(&never);
+        }
+        if let Some(constraints) = sections.get("Tech constraints:") {
+            context.tech_constraints = constraints.clone();
+        }
+    }
+
+    // Parse 03-Tech-Stack.md
+    let tech_stack_path = planning_dir.join("03-Tech-Stack.md");
+    if tech_stack_path.exists() {
+        let content = fs::read_to_string(&tech_stack_path)
+            .context("Failed to read 03-Tech-Stack.md")?;
+        let sections = extract_sections(&content);
+
+        if let Some(stack) = sections.get("Stack (force yourself to choose NOW):") {
+            context.tech_stack = stack.clone();
+        }
+        if let Some(why) = sections.get("Why these choices?") {
+            context.stack_justification = why.clone();
+        }
+        if let Some(not_use) = sections.get("What I will NOT use:") {
+            context.tech_exclusions = not_use.clone();
+        }
+        if let Some(deps) = sections.get("Dependencies (max 10 important ones):") {
+            context.dependencies = deps.clone();
+        }
+    }
+
+    // Parse 04-Architecture.md
+    let arch_path = planning_dir.join("04-Architecture.md");
+    if arch_path.exists() {
+        let content = fs::read_to_string(&arch_path)
+            .context("Failed to read 04-Architecture.md")?;
+        let sections = extract_sections(&content);
+
+        if let Some(folder) = sections.get("Folder structure:") {
+            context.folder_structure = folder.clone();
+        }
+        if let Some(data) = sections.get("Data model (main entities):") {
+            context.data_model = data.clone();
+        }
+        if let Some(flow) = sections.get("Flow (user journey):") {
+            context.user_flow = flow.clone();
+        }
+        if let Some(decisions) = sections.get("Critical technical decisions:") {
+            context.technical_decisions = decisions.clone();
+        }
+    }
+
+    // Parse 05-MVP-Breakdown.md
+    let mvp_path = planning_dir.join("05-MVP-Breakdown.md");
+    if mvp_path.exists() {
+        let content = fs::read_to_string(&mvp_path)
+            .context("Failed to read 05-MVP-Breakdown.md")?;
+        // For MVP breakdown, we want the whole document
+        context.mvp_breakdown = content;
+    }
+
+    Ok(context)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
