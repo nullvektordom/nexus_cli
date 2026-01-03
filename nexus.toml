@@ -15,9 +15,11 @@ heuristics_file = "00-MANAGEMENT/sprints/sprint-2-gate-command/local-docs/Gate-H
 strict_mode = true
 
 [state]
-active_sprint = "sprint-2-gate-command"
 is_unlocked = false
-last_gate_pass = 2025-12-30T21:18:00Z
+
+[state.active_sprint]
+current = "sprint-3"
+status = "approved"
 
 [templates]
 claude_template = "templates/CLAUDE.md.example"

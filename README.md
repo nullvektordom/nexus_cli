@@ -8,6 +8,7 @@ Nexus CLI enforces planning discipline through a gated workflow:
 1. **Init** - Create a new project with planning templates
 2. **Gate** - Validate that planning documents are complete
 3. **Unlock** - Generate CLAUDE.md from validated planning docs
+4. **Sprint** - Create sprint branches with scoped workspaces
 
 ## Features
 
@@ -15,6 +16,7 @@ Nexus CLI enforces planning discipline through a gated workflow:
 - **Gate Validation**: Heuristic-based validation ensures planning quality
 - **AI Integration**: Generate CLAUDE.md for AI-assisted development
 - **Git Integration**: Automatic repository initialization and initial commit
+- **Sprint Management**: Create sprint branches with scoped task lists and context
 - **Path Flexibility**: Configurable paths for Obsidian vaults and planning directories
 
 ## Installation
@@ -155,6 +157,92 @@ Output:
 
 This prevents generating CLAUDE.md from incomplete planning.
 
+### 5. Start a Sprint
+
+After unlocking, create a sprint workspace:
+
+```bash
+nexus sprint . 4
+```
+
+This command:
+1. **Checks sequencing** - Blocks if previous sprint not approved
+2. **Parses MVP breakdown** - Extracts sprint tasks from 05-MVP-Breakdown.md
+3. **Creates git branch** - Creates sprint-{number}-{name} branch
+4. **Scaffolds workspace** - Creates Obsidian sprint folder structure
+5. **Updates config** - Marks sprint as active in nexus.toml
+
+Example output:
+```
+🚀 Sprint Orchestrator
+
+📂 Project: nexus_cli
+📁 Planning path: /path/to/obsidian/vault
+
+📖 Parsing MVP breakdown...
+  ✓ Found Sprint 4: The Sprint Orchestrator (The Leash)
+
+🌿 Creating git branch...
+  ✓ Branch created: sprint-4-the-sprint-orchestrator
+
+📁 Scaffolding sprint workspace...
+  ✓ Created: 00-MANAGEMENT/sprints/sprint-4-the-sprint-orchestrator/
+  ✓ Tasks.md
+  ✓ Sprint-Context.md
+  ✓ approvals/
+  ✓ sessions/
+
+💾 Updating nexus.toml...
+  ✓ Active sprint updated
+
+✅ SPRINT READY
+
+Sprint 4 is now active: The Sprint Orchestrator (The Leash)
+
+Next steps:
+  1. Review tasks in: 00-MANAGEMENT/sprints/sprint-4-the-sprint-orchestrator/Tasks.md
+  2. Check scope boundaries in: 00-MANAGEMENT/sprints/sprint-4-the-sprint-orchestrator/Sprint-Context.md
+  3. Start implementing the tasks!
+```
+
+#### Sprint Workspace Structure
+
+Each sprint creates an isolated workspace:
+
+```
+00-MANAGEMENT/sprints/sprint-{number}-{name}/
+├── Tasks.md              # Sprint task list (from MVP breakdown)
+├── Sprint-Context.md     # Scope boundaries and success criteria
+├── approvals/            # Approval artifacts
+└── sessions/             # Dev session notes
+```
+
+#### Sprint Sequencing
+
+Sprints must be completed in order. If you try to start Sprint 4 while Sprint 3 is still in progress:
+
+```bash
+nexus sprint . 4
+```
+
+Output:
+```
+❌ SPRINT BLOCKED: Previous sprint not approved
+
+  Current active sprint: sprint-3
+  Status: in_progress
+
+You must complete and approve the current sprint before starting a new one.
+```
+
+To proceed, mark the current sprint as approved in `nexus.toml`:
+
+```toml
+[state.active_sprint]
+current = "sprint-3"
+status = "approved"  # Change from "in_progress"
+```
+
 ### Idempotency
 
 Running `unlock` multiple times is safe:
@@ -187,6 +275,10 @@ planning_path = "/path/to/project"  # Defaults to obsidian_path if not set
 [state]
 is_unlocked = false
 
+[state.active_sprint]
+current = "sprint-4"
+status = "in_progress"  # or "approved"
+
 [templates]
 claude_template = "templates/CLAUDE.md.example"
 ```
@@ -211,14 +303,17 @@ Run specific test suite:
 ```bash
 cargo test --test gate_integration
 cargo test --test unlock_integration
+cargo test --test sprint_integration
 ```
 
 ## Architecture
 
-- `src/commands/` - Command implementations (init, gate, unlock)
+- `src/commands/` - Command implementations (init, gate, unlock, sprint)
 - `src/config.rs` - Configuration structure and loading
+- `src/git_ops.rs` - Git branch creation and management
 - `src/heuristics.rs` - Gate validation rules
 - `src/planning.rs` - Planning document parsing and validation
+- `src/scaffolding.rs` - Sprint workspace scaffolding
 - `src/templating.rs` - CLAUDE.md template rendering
 - `templates/` - Project templates and Tera templates
 

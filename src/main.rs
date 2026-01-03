@@ -3,8 +3,10 @@ use std::path::PathBuf;
 
 mod commands;
 mod config;
+mod git_ops;
 mod heuristics;
 mod planning;
+mod scaffolding;
 mod templating;
 
 #[derive(Parser)]
@@ -67,12 +69,10 @@ fn main() {
             project_path,
             sprint_number,
         } => {
-            println!(
-                "Sprint command called for: {} (Sprint {})",
-                project_path.display(),
-                sprint_number
-            );
-            // TODO: Implement sprint logic
+            if let Err(e) = commands::sprint::execute(&project_path, sprint_number) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
         }
     }
 }
