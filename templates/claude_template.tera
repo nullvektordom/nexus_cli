@@ -1,0 +1,74 @@
+# 🛡️ PROJECT CONSTITUTION: {{ project_name }}
+
+## 📜 Project Overview
+
+{{ problem_statement }}
+
+## 🎯 Vision & Goals
+
+{{ vision }}
+
+## 🔍 Problem Definition
+
+{{ problem_details }}
+
+## 📐 Scope & Boundaries
+
+### What We're Building (MVP)
+{{ mvp_scope }}
+
+### What We're NOT Building
+{{ anti_scope }}
+
+### Technical Constraints
+{{ tech_constraints }}
+
+## 🏗️ Technical Stack
+
+### Core Technologies
+{{ tech_stack }}
+
+### Stack Justification
+{{ stack_justification }}
+
+### Technology Exclusions
+{{ tech_exclusions }}
+
+### Key Dependencies
+{{ dependencies }}
+
+## 🏛️ Architecture
+
+### Project Structure
+{{ folder_structure }}
+
+### Data Model
+{{ data_model }}
+
+### User Flow
+{{ user_flow }}
+
+### Critical Technical Decisions
+{{ technical_decisions }}
+
+## 📋 MVP Breakdown
+
+{{ mvp_breakdown }}
+
+## 🚫 Rules of Engagement
+
+1. **Atomic focus:** Work on one task at a time as defined in the sprint tasks.
+2. **Testing:** All new features require appropriate tests.
+3. **Documentation:** Keep code well-documented and maintain session logs.
+4. **Git hygiene:** Commit frequently with clear messages.
+
+## 📂 Project Structure Reference
+
+- `01-PLANNING/`: Strategic planning documents (read-only reference)
+- `00-MANAGEMENT/`: Active sprint management and session logs
+- `nexus.toml`: Project configuration
+
+---
+
+*This document was generated from planning documents on {{ generation_date }}*
+*Keep this file as the permanent source of truth for the project's vision and constraints.*
