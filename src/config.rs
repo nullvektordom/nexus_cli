@@ -14,6 +14,8 @@ pub struct NexusConfig {
     pub state: Option<StateConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub templates: Option<TemplatesConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brain: Option<BrainConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -64,6 +66,19 @@ pub struct TemplatesConfig {
     pub claude_template: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BrainConfig {
+    /// Qdrant gRPC URL (e.g., "http://100.64.0.1:6334" for Tailscale)
+    pub qdrant_url: String,
+    /// Whether the brain is enabled
+    #[serde(default = "default_brain_enabled")]
+    pub enabled: bool,
+}
+
+fn default_brain_enabled() -> bool {
+    false
+}
+
 impl NexusConfig {
     /// Create a new NexusConfig with the given project name and obsidian path
     pub fn new(project_name: String, obsidian_path: String) -> Self {
@@ -93,6 +108,7 @@ impl NexusConfig {
             templates: Some(TemplatesConfig {
                 claude_template: "templates/CLAUDE.md.example".to_string(),
             }),
+            brain: None, // Brain is disabled by default, configure in nexus.toml
         }
     }
 

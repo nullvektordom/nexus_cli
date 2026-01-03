@@ -23,3 +23,7 @@ status = "approved"
 
 [templates]
 claude_template = "templates/CLAUDE.md.example"
+
+[brain]
+qdrant_url = "http://100.105.8.97:6334"
+enabled = true
