@@ -28,7 +28,10 @@ pub fn scaffold_sprint_folder(planning_path: &Path, sprint_data: &SprintData) ->
     let sprint_folder = planning_path
         .join("00-MANAGEMENT")
         .join("sprints")
-        .join(format!("sprint-{}-{}", sprint_data.number, sprint_data.name));
+        .join(format!(
+            "sprint-{}-{}",
+            sprint_data.number, sprint_data.name
+        ));
 
     // Create main sprint folder
     fs::create_dir_all(&sprint_folder).with_context(|| {
@@ -46,13 +49,21 @@ pub fn scaffold_sprint_folder(planning_path: &Path, sprint_data: &SprintData) ->
 
     // Create approvals/ folder
     let approvals_dir = sprint_folder.join("approvals");
-    fs::create_dir_all(&approvals_dir)
-        .with_context(|| format!("Failed to create approvals folder: {}", approvals_dir.display()))?;
+    fs::create_dir_all(&approvals_dir).with_context(|| {
+        format!(
+            "Failed to create approvals folder: {}",
+            approvals_dir.display()
+        )
+    })?;
 
     // Create sessions/ folder
     let sessions_dir = sprint_folder.join("sessions");
-    fs::create_dir_all(&sessions_dir)
-        .with_context(|| format!("Failed to create sessions folder: {}", sessions_dir.display()))?;
+    fs::create_dir_all(&sessions_dir).with_context(|| {
+        format!(
+            "Failed to create sessions folder: {}",
+            sessions_dir.display()
+        )
+    })?;
 
     Ok(())
 }
@@ -121,8 +132,12 @@ fn create_context_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result
     );
 
     let context_path = sprint_folder.join("Sprint-Context.md");
-    fs::write(&context_path, context_content)
-        .with_context(|| format!("Failed to write Sprint-Context.md: {}", context_path.display()))?;
+    fs::write(&context_path, context_content).with_context(|| {
+        format!(
+            "Failed to write Sprint-Context.md: {}",
+            context_path.display()
+        )
+    })?;
 
     Ok(())
 }
@@ -208,10 +223,7 @@ mod tests {
         );
         assert!(content.contains("Task one"), "Should contain tasks");
         assert!(content.contains("Task two"), "Should contain tasks");
-        assert!(
-            content.contains("Blockers"),
-            "Should have blockers section"
-        );
+        assert!(content.contains("Blockers"), "Should have blockers section");
     }
 
     #[test]

@@ -6,11 +6,11 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Helper to create nexus.toml config
-fn create_nexus_config(project_path: &PathBuf, vault_path: &PathBuf) {
+fn create_nexus_config(project_path: &Path, vault_path: &Path) {
     let vault_path_str = vault_path.to_str().unwrap();
     let config_content = format!(
         r#"[project]
@@ -43,7 +43,7 @@ claude_template = "templates/CLAUDE.md.example"
 }
 
 /// Helper to create heuristics file
-fn create_heuristics(vault_path: &PathBuf) {
+fn create_heuristics(vault_path: &Path) {
     let heuristics_content = r#"{
   "min_section_length": 50,
   "required_headers": [
@@ -92,10 +92,10 @@ fn test_stress_ghost_vault_missing_path() {
 
     // Create config pointing to non-existent vault
     let ghost_vault = project_path.join("nonexistent_vault");
-    create_nexus_config(&project_path.to_path_buf(), &ghost_vault);
+    create_nexus_config(project_path, &ghost_vault);
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -113,10 +113,10 @@ fn test_stress_ghost_vault_is_file_not_directory() {
     let fake_vault = project_path.join("fake_vault.txt");
     fs::write(&fake_vault, "this is a file, not a directory").unwrap();
 
-    create_nexus_config(&project_path.to_path_buf(), &fake_vault);
+    create_nexus_config(project_path, &fake_vault);
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -135,7 +135,7 @@ fn test_stress_empty_vault_no_planning_docs() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     // Create empty planning directory
@@ -148,7 +148,7 @@ fn test_stress_empty_vault_no_planning_docs() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -164,7 +164,7 @@ fn test_stress_empty_vault_missing_dashboard() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     // Create empty management directory (no dashboard)
@@ -176,7 +176,7 @@ fn test_stress_empty_vault_missing_dashboard() {
     fs::create_dir_all(&planning_dir).unwrap();
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -195,7 +195,7 @@ fn test_stress_malformed_utf8_in_planning_doc() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     let planning_dir = vault_path.join("01-PLANNING");
@@ -203,14 +203,14 @@ fn test_stress_malformed_utf8_in_planning_doc() {
 
     // Write binary data to a .md file (invalid UTF-8)
     let bad_file = planning_dir.join("corrupted.md");
-    fs::write(&bad_file, &[0xFF, 0xFE, 0xFD, 0x00, 0x80, 0x81]).unwrap();
+    fs::write(&bad_file, [0xFF, 0xFE, 0xFD, 0x00, 0x80, 0x81]).unwrap();
 
     let management_dir = vault_path.join("00-MANAGEMENT");
     fs::create_dir_all(&management_dir).unwrap();
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -228,7 +228,7 @@ fn test_stress_malformed_utf8_in_dashboard() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     let management_dir = vault_path.join("00-MANAGEMENT");
@@ -236,13 +236,13 @@ fn test_stress_malformed_utf8_in_dashboard() {
 
     // Write binary data to dashboard
     let dashboard = management_dir.join("00-START-HERE.md");
-    fs::write(&dashboard, &[0xFF, 0xFE, 0xFD, 0x00]).unwrap();
+    fs::write(&dashboard, [0xFF, 0xFE, 0xFD, 0x00]).unwrap();
 
     let planning_dir = vault_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -268,7 +268,7 @@ fn test_stress_permission_denied_planning_doc() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     let planning_dir = vault_path.join("01-PLANNING");
@@ -286,7 +286,7 @@ fn test_stress_permission_denied_planning_doc() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     let result = cmd.assert().failure();
@@ -313,12 +313,12 @@ fn test_stress_missing_heuristics_file() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
 
     // Don't create heuristics file
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -338,7 +338,7 @@ fn test_stress_large_markdown_file() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     let planning_dir = vault_path.join("01-PLANNING");
@@ -364,7 +364,7 @@ fn test_stress_large_markdown_file() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command - should warn about large file but process it
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -384,7 +384,7 @@ fn test_stress_malformed_heuristics_json() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
 
     // Write malformed JSON to heuristics file
     let bad_json = r#"{
@@ -395,7 +395,7 @@ fn test_stress_malformed_heuristics_json() {
     fs::write(vault_path.join("Gate-Heuristics.json"), bad_json).unwrap();
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -414,7 +414,7 @@ fn test_stress_planning_dir_with_non_md_files() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(&project_path.to_path_buf(), &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.to_path_buf());
     create_heuristics(&vault_path.to_path_buf());
 
     let planning_dir = vault_path.join("01-PLANNING");
@@ -422,7 +422,7 @@ fn test_stress_planning_dir_with_non_md_files() {
 
     // Add non-markdown files (should be ignored)
     fs::write(planning_dir.join("notes.txt"), "some text").unwrap();
-    fs::write(planning_dir.join("image.png"), &[0x89, 0x50, 0x4E, 0x47]).unwrap();
+    fs::write(planning_dir.join("image.png"), [0x89, 0x50, 0x4E, 0x47]).unwrap();
     fs::create_dir_all(planning_dir.join("subfolder")).unwrap();
 
     let management_dir = vault_path.join("00-MANAGEMENT");
@@ -430,7 +430,7 @@ fn test_stress_planning_dir_with_non_md_files() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command - should report no planning documents found
-    let mut cmd = Command::cargo_bin("nexus_cli").unwrap();
+    let mut cmd = Command::cargo_bin("nexus").unwrap();
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()

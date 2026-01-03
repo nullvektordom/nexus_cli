@@ -299,7 +299,7 @@ fn test_unlock_fails_if_gate_fails() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = tempdir()?;
     setup_incomplete_project(temp_dir.path());
 
-    let mut cmd = Command::cargo_bin("nexus_cli")?;
+    let mut cmd = Command::cargo_bin("nexus")?;
     cmd.arg("unlock").arg(temp_dir.path());
 
     cmd.assert()
@@ -308,7 +308,10 @@ fn test_unlock_fails_if_gate_fails() -> Result<(), Box<dyn std::error::Error>> {
 
     // Verify CLAUDE.md was NOT created
     let claude_path = temp_dir.path().join("CLAUDE.md");
-    assert!(!claude_path.exists(), "CLAUDE.md should not be created when gate fails");
+    assert!(
+        !claude_path.exists(),
+        "CLAUDE.md should not be created when gate fails"
+    );
 
     Ok(())
 }
@@ -318,7 +321,7 @@ fn test_unlock_succeeds_with_complete_planning() -> Result<(), Box<dyn std::erro
     let temp_dir = tempdir()?;
     setup_complete_project(temp_dir.path());
 
-    let mut cmd = Command::cargo_bin("nexus_cli")?;
+    let mut cmd = Command::cargo_bin("nexus")?;
     cmd.arg("unlock").arg(temp_dir.path());
 
     cmd.assert()
@@ -353,12 +356,12 @@ fn test_unlock_is_idempotent() -> Result<(), Box<dyn std::error::Error>> {
     setup_complete_project(temp_dir.path());
 
     // First unlock
-    let mut cmd = Command::cargo_bin("nexus_cli")?;
+    let mut cmd = Command::cargo_bin("nexus")?;
     cmd.arg("unlock").arg(temp_dir.path());
     cmd.assert().success();
 
     // Second unlock should still succeed (idempotent)
-    let mut cmd2 = Command::cargo_bin("nexus_cli")?;
+    let mut cmd2 = Command::cargo_bin("nexus")?;
     cmd2.arg("unlock").arg(temp_dir.path());
     cmd2.assert()
         .success()
