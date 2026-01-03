@@ -33,27 +33,35 @@ fn test_init_creates_project_successfully() {
         config_path.display()
     );
 
-    // Verify nexus.toml content
+    // Verify nexus.toml content (new structured format)
     let config_content = fs::read_to_string(&config_path).expect("Failed to read nexus.toml");
     assert!(
-        config_content.contains(&format!("project_name = \"{}\"", project_name)),
-        "Config should contain project_name"
+        config_content.contains("[project]"),
+        "Config should contain [project] section"
+    );
+    assert!(
+        config_content.contains(&format!("name = \"{}\"", project_name)),
+        "Config should contain project name"
     );
     assert!(
         config_content.contains("obsidian_path ="),
         "Config should contain obsidian_path"
     );
     assert!(
-        config_content.contains("created_at ="),
-        "Config should contain created_at timestamp"
+        config_content.contains("[structure]"),
+        "Config should contain [structure] section"
     );
     assert!(
-        !config_content.contains("repo_path"),
-        "Config should not contain repo_path initially"
+        config_content.contains("[gate]"),
+        "Config should contain [gate] section"
     );
     assert!(
-        !config_content.contains("current_sprint"),
-        "Config should not contain current_sprint initially"
+        config_content.contains("[obsidian]"),
+        "Config should contain [obsidian] section"
+    );
+    assert!(
+        config_content.contains("planning_path ="),
+        "Config should contain planning_path"
     );
 
     // Verify template files are copied

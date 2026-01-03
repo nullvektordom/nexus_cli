@@ -3,36 +3,12 @@
 //! Validates planning documents and dashboard checkboxes before allowing project unlock.
 //! Provides ADHD-friendly terminal output with context snippets and line numbers.
 
+use crate::config::NexusConfig;
 use crate::heuristics::load_heuristics;
 use crate::planning::{ValidationIssue, validate_dashboard_checkboxes, validate_planning_document};
 use anyhow::{Context, Result};
 use colored::Colorize;
-use serde::Deserialize;
 use std::path::Path;
-
-/// Gate-specific configuration structure
-#[derive(Debug, Deserialize)]
-struct GateConfig {
-    project: ProjectConfig,
-    structure: StructureConfig,
-    gate: GateSettings,
-}
-
-#[derive(Debug, Deserialize)]
-struct ProjectConfig {
-    obsidian_path: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct StructureConfig {
-    planning_dir: String,
-    management_dir: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct GateSettings {
-    heuristics_file: String,
-}
 
 /// Execute the gate command
 /// Returns Ok(()) if gate passes, Err if validation fails or error occurs
@@ -41,11 +17,11 @@ pub fn execute(project_path: &Path) -> Result<()> {
     let config_path = project_path.join("nexus.toml");
     let config_content = std::fs::read_to_string(&config_path)
         .with_context(|| format!("Failed to read config from: {}", config_path.display()))?;
-    let config: GateConfig = toml::from_str(&config_content)
+    let config: NexusConfig = toml::from_str(&config_content)
         .with_context(|| format!("Failed to parse config from: {}", config_path.display()))?;
 
     // Resolve obsidian vault path
-    let vault_path = std::path::PathBuf::from(&config.project.obsidian_path);
+    let vault_path = config.get_repo_path();
 
     // DEFENSIVE: Verify vault exists and is accessible
     if !vault_path.exists() {

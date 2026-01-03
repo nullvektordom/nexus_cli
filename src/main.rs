@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod heuristics;
 mod planning;
+mod templating;
 
 #[derive(Parser)]
 #[command(name = "nexus")]
@@ -57,8 +58,10 @@ fn main() {
             }
         }
         Commands::Unlock { project_path } => {
-            println!("Unlock command called for: {}", project_path.display());
-            // TODO: Implement unlock logic
+            if let Err(e) = commands::unlock::execute(&project_path) {
+                eprintln!("{}", e);
+                std::process::exit(1);
+            }
         }
         Commands::Sprint {
             project_path,
