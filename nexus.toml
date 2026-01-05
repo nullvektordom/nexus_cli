@@ -27,3 +27,17 @@ claude_template = "templates/CLAUDE.md.example"
 [brain]
 qdrant_url = "http://100.105.8.97:6334"
 enabled = true
+
+[llm]
+provider = "openrouter"  # Default (cost-effective). Options: "openrouter", "claude", "gemini"
+model = "deepseek/deepseek-r1"  # Default: DeepSeek R1 (highly cost-effective)
+enabled = true
+# Note: Set API key via environment variable:
+#   export OPENROUTER_API_KEY="your-key"  (for OpenRouter - default)
+#   export ANTHROPIC_API_KEY="your-key"   (for Claude)
+#   export GOOGLE_API_KEY="your-key"      (for Gemini)
+#
+# Alternative OpenRouter models:
+#   - "deepseek/deepseek-r1" (default, great performance/cost)
+#   - "anthropic/claude-3.5-sonnet" (via OpenRouter)
+#   - "google/gemini-2.0-flash-thinking-exp-1219" (via OpenRouter)

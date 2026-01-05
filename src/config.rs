@@ -16,6 +16,8 @@ pub struct NexusConfig {
     pub templates: Option<TemplatesConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub brain: Option<BrainConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +81,34 @@ fn default_brain_enabled() -> bool {
     false
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmConfig {
+    /// LLM provider: "openrouter" (default), "claude", or "gemini"
+    #[serde(default = "default_provider")]
+    pub provider: String,
+    /// API key for the LLM provider (set via environment variable recommended)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    /// Model to use (e.g., "deepseek/deepseek-r1", "claude-3-5-sonnet-20241022", "gemini-1.5-pro")
+    #[serde(default = "default_model")]
+    pub model: String,
+    /// Whether LLM integration is enabled
+    #[serde(default = "default_llm_enabled")]
+    pub enabled: bool,
+}
+
+fn default_provider() -> String {
+    "openrouter".to_string()
+}
+
+fn default_model() -> String {
+    "deepseek/deepseek-r1".to_string()
+}
+
+fn default_llm_enabled() -> bool {
+    false
+}
+
 impl NexusConfig {
     /// Create a new NexusConfig with the given project name and obsidian path
     pub fn new(project_name: String, obsidian_path: String) -> Self {
@@ -109,6 +139,7 @@ impl NexusConfig {
                 claude_template: "templates/CLAUDE.md.example".to_string(),
             }),
             brain: None, // Brain is disabled by default, configure in nexus.toml
+            llm: None,   // LLM is disabled by default, configure in nexus.toml
         }
     }
 
