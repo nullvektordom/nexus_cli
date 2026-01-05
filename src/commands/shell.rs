@@ -267,9 +267,18 @@ fn print_help() {
     println!("  {}        Clear the screen", "clear".cyan());
     println!("  {}  | {}  Exit the shell", "exit".cyan(), "quit".cyan());
     println!();
+    println!("{}", "Semantic Search Flags:".bold().underline());
+    println!();
+    println!("  {} <query>    Search across all projects (bypass project filter)", "--global".cyan());
+    println!("  {}    <query>    Search only Architecture and GlobalStandard layers", "--arch".cyan());
+    println!();
     println!(
         "{}",
         "  💡 Tip: Any unrecognized input is treated as a semantic search!".dimmed()
+    );
+    println!(
+        "{}",
+        "  Example: 'safety rules --arch' or 'error handling --global'".dimmed()
     );
     println!();
 }
@@ -663,8 +672,33 @@ fn execute_why(state: &NexusState, last_gate_error: &Arc<Mutex<Option<String>>>)
     Ok(())
 }
 
-/// Execute a semantic query against the Brain
-fn execute_semantic_query(query: &str, state: &NexusState) -> Result<()> {
+/// Execute a semantic query against the Brain with optional flags
+///
+/// Supported flags:
+/// - `--global`: Search across all projects (bypass project filter)
+/// - `--arch`: Only search Architecture and GlobalStandard layers
+fn execute_semantic_query(input: &str, state: &NexusState) -> Result<()> {
+    use crate::brain::Layer;
+
+    // Parse flags and extract actual query
+    let mut is_global = false;
+    let mut arch_only = false;
+    let mut query_parts = Vec::new();
+
+    for part in input.split_whitespace() {
+        match part {
+            "--global" => is_global = true,
+            "--arch" => arch_only = true,
+            _ => query_parts.push(part),
+        }
+    }
+
+    let query = query_parts.join(" ");
+
+    if query.is_empty() {
+        anyhow::bail!("Query cannot be empty");
+    }
+
     let project_id = state.active_project_id.as_ref().ok_or_else(|| {
         anyhow::anyhow!("No active project. Use 'use <project>' first for semantic search.")
     })?;
@@ -673,9 +707,20 @@ fn execute_semantic_query(query: &str, state: &NexusState) -> Result<()> {
         .get_active_repo_path()
         .ok_or_else(|| anyhow::anyhow!("Failed to get repo path"))?;
 
+    // Display search mode
+    let search_mode = if is_global && arch_only {
+        "🌍 Global Architecture Search".yellow()
+    } else if is_global {
+        "🌍 Global Search".yellow()
+    } else if arch_only {
+        "🏛️ Architecture Search".cyan()
+    } else {
+        "🔍 Project Search".cyan()
+    };
+
     println!(
         "{} \"{}\"",
-        "🔍 Searching Brain for:".cyan(),
+        search_mode,
         query.italic()
     );
 
@@ -699,15 +744,26 @@ fn execute_semantic_query(query: &str, state: &NexusState) -> Result<()> {
         anyhow::bail!("Brain is disabled. Cannot perform semantic search.");
     }
 
+    // Determine layer filter
+    let layers = if arch_only {
+        Some(vec![Layer::ProjectArchitecture, Layer::GlobalStandard])
+    } else {
+        None
+    };
+
     // Search the Brain
     let results = tokio::runtime::Runtime::new()?.block_on(async {
         let brain = NexusBrain::connect(&brain_config.qdrant_url).await?;
 
         // Generate query embedding (in production, use actual embedding model)
-        let query_vector = generate_query_embedding(query);
+        let query_vector = generate_query_embedding(&query);
 
-        // Search with project filter
-        brain.search(query_vector, 5, Some(project_id), None).await
+        // Execute appropriate search based on flags
+        if is_global {
+            brain.global_search(query_vector, 5, layers).await
+        } else {
+            brain.search(query_vector, 5, project_id, layers).await
+        }
     })?;
 
     if results.is_empty() {

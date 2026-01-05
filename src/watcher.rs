@@ -5,11 +5,12 @@
 //! - Dynamic path watching based on active project
 //! - Intelligent file chunking for large files
 //! - Async ingestion pipeline to Qdrant
+//! - Automatic layer classification based on directory structure
 //! - Special handling for Architecture.md changes (triggers full re-index)
 
-use crate::brain::{NexusBrain, VectorMetadata};
+use crate::brain::{Layer, NexusBrain, NexusMetadata};
 use anyhow::{Context, Result};
-use crossbeam_channel::{Receiver, Sender, bounded};
+use crossbeam_channel::{bounded, Receiver, Sender};
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use std::collections::HashSet;
 use std::fs;
@@ -257,7 +258,57 @@ fn handle_file_event(
     Ok(())
 }
 
-/// Index a file to the Brain
+/// Get the current machine's hostname
+fn get_machine_id() -> String {
+    hostname::get()
+        .ok()
+        .and_then(|h| h.into_string().ok())
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+/// Classify a file into a layer based on its path
+///
+/// Classification rules:
+/// - Files in `01-PLANNING/` → ProjectArchitecture
+/// - Files in `00-MANAGEMENT/sprints/` → SprintMemory
+/// - Files in `src/`, `tests/`, etc. → SourceCode
+/// - Files in a global standards directory → GlobalStandard
+fn classify_file_layer(file_path: &Path) -> Layer {
+    let path_str = file_path.to_string_lossy();
+
+    // Check for Planning directory (Architecture)
+    if path_str.contains("/01-PLANNING/") || path_str.contains("\\01-PLANNING\\") {
+        return Layer::ProjectArchitecture;
+    }
+
+    // Check for Management/Sprints directory (Sprint Memory)
+    if path_str.contains("/00-MANAGEMENT/sprints/")
+        || path_str.contains("\\00-MANAGEMENT\\sprints\\")
+    {
+        return Layer::SprintMemory;
+    }
+
+    // Check for source code directories
+    if path_str.contains("/src/")
+        || path_str.contains("\\src\\")
+        || path_str.contains("/tests/")
+        || path_str.contains("\\tests\\")
+        || path_str.ends_with(".rs")
+        || path_str.ends_with(".toml")
+    {
+        return Layer::SourceCode;
+    }
+
+    // Check for global standards (if in a specific global standards path)
+    if path_str.contains("/global-standards/") || path_str.contains("\\global-standards\\") {
+        return Layer::GlobalStandard;
+    }
+
+    // Default to SourceCode for unclassified files
+    Layer::SourceCode
+}
+
+/// Index a file to the Brain with proper metadata classification
 fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()> {
     // Read file content
     let content = fs::read_to_string(file_path)
@@ -268,6 +319,16 @@ fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()>
         .extension()
         .and_then(|e| e.to_str())
         .map(|s| s.to_string());
+
+    // Classify file into layer
+    let layer = classify_file_layer(file_path);
+
+    // Get machine ID
+    let machine_id = get_machine_id();
+
+    // TODO: Get sprint number from project config (nexus.toml)
+    // For now, set to None
+    let sprint_number: Option<u32> = None;
 
     // Chunk the content
     let chunks = chunk_text(&content);
@@ -285,11 +346,13 @@ fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()>
             // Generate a simple vector (in production, use actual embeddings)
             let vector = generate_dummy_embedding(chunk);
 
-            // Create metadata
-            let mut metadata = VectorMetadata::new(
+            // Create metadata with new schema
+            let mut metadata = NexusMetadata::new(
                 project_id.to_string(),
+                layer.clone(),
+                machine_id.clone(),
+                sprint_number,
                 file_path.display().to_string(),
-                "current".to_string(), // TODO: Get actual sprint context
             );
             metadata.file_type = file_type.clone();
             metadata.chunk_index = Some(idx as u32);
@@ -304,7 +367,7 @@ fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()>
         Ok::<(), anyhow::Error>(())
     })?;
 
-    println!("  ✓ Indexed {} chunks", chunks.len());
+    println!("  ✓ Indexed {} chunks (layer: {})", chunks.len(), layer.as_str());
 
     Ok(())
 }
