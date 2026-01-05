@@ -34,7 +34,7 @@ impl Default for GateHeuristics {
     /// Provides hardcoded fallback values matching Gate-Heuristics.json
     fn default() -> Self {
         Self {
-            min_section_length: 50,
+            min_section_length: 20,
             required_headers: vec![
                 "Problem".to_string(),
                 "Vision".to_string(),
@@ -97,7 +97,7 @@ mod tests {
     fn test_default_heuristics() {
         let heuristics = GateHeuristics::default();
 
-        assert_eq!(heuristics.min_section_length, 50);
+        assert_eq!(heuristics.min_section_length, 20);
         assert_eq!(heuristics.required_headers.len(), 6);
         assert!(heuristics.required_headers.contains(&"Problem".to_string()));
         assert!(
@@ -126,7 +126,7 @@ mod tests {
     #[test]
     fn test_load_heuristics_from_json() {
         let json_content = r#"{
-  "min_section_length": 50,
+  "min_section_length": 20,
   "required_headers": [
     "Problem",
     "Vision",
@@ -157,7 +157,7 @@ mod tests {
 
         let heuristics = load_heuristics(temp_file.path()).expect("Failed to load heuristics");
 
-        assert_eq!(heuristics.min_section_length, 50);
+        assert_eq!(heuristics.min_section_length, 20);
         assert_eq!(heuristics.required_headers.len(), 6);
         assert_eq!(heuristics.illegal_strings.len(), 7);
         assert_eq!(heuristics.management_files.dashboard, "00-START-HERE.md");
