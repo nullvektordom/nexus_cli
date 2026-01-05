@@ -4,14 +4,15 @@
 //! Provides methods for:
 //! - Connecting to Qdrant via gRPC over Tailscale
 //! - Managing the nexus_brain collection
-//! - Storing vectors with rich metadata (project_id, file_path, sprint_context)
-//! - Querying the semantic brain
+//! - Storing vectors with rich metadata (project_id, file_path, layer, machine_id, sprint_number)
+//! - Querying the semantic brain with advanced filtering
 
 use anyhow::{Context, Result};
 use qdrant_client::Qdrant;
 use qdrant_client::qdrant::{
-    Condition, CreateCollectionBuilder, Distance, Filter, GetCollectionInfoResponse, PointStruct,
-    ScoredPoint, SearchPointsBuilder, UpsertPointsBuilder, Value, VectorParamsBuilder,
+    Condition, CreateCollectionBuilder, CreateFieldIndexCollectionBuilder, Distance, FieldType,
+    Filter, GetCollectionInfoResponse, PointStruct, ScoredPoint,
+    SearchPointsBuilder, UpsertPointsBuilder, Value, VectorParamsBuilder,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -22,17 +23,61 @@ pub const COLLECTION_NAME: &str = "nexus_brain";
 /// Vector dimension size (using OpenAI ada-002 compatible size)
 pub const VECTOR_SIZE: u64 = 1536;
 
+/// Layer categorization for knowledge organization
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum Layer {
+    /// Global standards and best practices (cross-project)
+    GlobalStandard,
+    /// Project architecture documentation
+    ProjectArchitecture,
+    /// Source code files
+    SourceCode,
+    /// Sprint-specific memory and context
+    SprintMemory,
+}
+
+impl Layer {
+    /// Convert layer to string for Qdrant payload
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Layer::GlobalStandard => "GlobalStandard",
+            Layer::ProjectArchitecture => "ProjectArchitecture",
+            Layer::SourceCode => "SourceCode",
+            Layer::SprintMemory => "SprintMemory",
+        }
+    }
+
+    /// Parse layer from string
+    #[allow(dead_code)]
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "GlobalStandard" => Some(Layer::GlobalStandard),
+            "ProjectArchitecture" => Some(Layer::ProjectArchitecture),
+            "SourceCode" => Some(Layer::SourceCode),
+            "SprintMemory" => Some(Layer::SprintMemory),
+            _ => None,
+        }
+    }
+}
+
 /// Metadata attached to each vector in the collection
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VectorMetadata {
+pub struct NexusMetadata {
     /// Unique identifier for the project
     pub project_id: String,
 
-    /// Path to the source file (relative to project root)
-    pub file_path: String,
+    /// Layer categorization for filtering
+    pub layer: Layer,
 
-    /// Sprint context (e.g., "sprint-5-nexus-sentinel")
-    pub sprint_context: String,
+    /// Hostname of the machine that indexed this content
+    pub machine_id: String,
+
+    /// Sprint number (if applicable)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sprint_number: Option<u32>,
+
+    /// Absolute path to the source file for local retrieval
+    pub file_path: String,
 
     /// Optional: File type (e.g., "rust", "markdown", "toml")
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -47,28 +92,40 @@ pub struct VectorMetadata {
     pub indexed_at: Option<String>,
 }
 
-impl VectorMetadata {
-    /// Create new metadata
-    pub fn new(project_id: String, file_path: String, sprint_context: String) -> Self {
+impl NexusMetadata {
+    /// Create new metadata with required fields
+    pub fn new(
+        project_id: String,
+        layer: Layer,
+        machine_id: String,
+        sprint_number: Option<u32>,
+        file_path: String,
+    ) -> Self {
         Self {
             project_id,
+            layer,
+            machine_id,
+            sprint_number,
             file_path,
-            sprint_context,
             file_type: None,
             chunk_index: None,
             indexed_at: Some(chrono::Utc::now().to_rfc3339()),
         }
     }
 
-    /// Convert to Qdrant payload format
+    /// Convert to Qdrant payload format with indexed keyword fields
     pub fn to_payload(&self) -> HashMap<String, Value> {
         let mut payload = HashMap::new();
+
+        // Indexed keyword fields for fast filtering
         payload.insert("project_id".to_string(), self.project_id.clone().into());
+        payload.insert("layer".to_string(), self.layer.as_str().to_string().into());
+        payload.insert("machine_id".to_string(), self.machine_id.clone().into());
         payload.insert("file_path".to_string(), self.file_path.clone().into());
-        payload.insert(
-            "sprint_context".to_string(),
-            self.sprint_context.clone().into(),
-        );
+
+        if let Some(sprint_number) = self.sprint_number {
+            payload.insert("sprint_number".to_string(), (sprint_number as i64).into());
+        }
 
         if let Some(ref file_type) = self.file_type {
             payload.insert("file_type".to_string(), file_type.clone().into());
@@ -133,7 +190,51 @@ impl NexusBrain {
                 )
                 .await
                 .context("Failed to create collection")?;
+
+            // Create indexed keyword fields for sub-millisecond filtering
+            self.create_payload_indexes().await?;
         }
+
+        Ok(())
+    }
+
+    /// Create payload indexes for keyword fields to enable fast filtering
+    async fn create_payload_indexes(&self) -> Result<()> {
+        // Index project_id as keyword
+        self.client
+            .create_field_index(
+                CreateFieldIndexCollectionBuilder::new(
+                    COLLECTION_NAME,
+                    "project_id",
+                    FieldType::Keyword,
+                ),
+            )
+            .await
+            .context("Failed to create project_id index")?;
+
+        // Index layer as keyword
+        self.client
+            .create_field_index(
+                CreateFieldIndexCollectionBuilder::new(
+                    COLLECTION_NAME,
+                    "layer",
+                    FieldType::Keyword,
+                ),
+            )
+            .await
+            .context("Failed to create layer index")?;
+
+        // Index machine_id as keyword
+        self.client
+            .create_field_index(
+                CreateFieldIndexCollectionBuilder::new(
+                    COLLECTION_NAME,
+                    "machine_id",
+                    FieldType::Keyword,
+                ),
+            )
+            .await
+            .context("Failed to create machine_id index")?;
 
         Ok(())
     }
@@ -179,7 +280,7 @@ impl NexusBrain {
         &self,
         id: u64,
         vector: Vec<f32>,
-        metadata: VectorMetadata,
+        metadata: NexusMetadata,
     ) -> Result<()> {
         if vector.len() != VECTOR_SIZE as usize {
             anyhow::bail!(
@@ -199,37 +300,95 @@ impl NexusBrain {
         Ok(())
     }
 
-    /// Search for similar vectors in the collection
+    /// Search for similar vectors in the collection with advanced filtering
+    ///
+    /// By default, this restricts results to the current project_id.
+    /// Use `global_search` for cross-project searches.
     ///
     /// # Arguments
     /// * `query_vector` - The query embedding vector
     /// * `limit` - Maximum number of results to return
-    /// * `project_id` - Optional project ID filter
-    /// * `file_pattern` - Optional file path pattern (e.g., "Architecture.md")
+    /// * `project_id` - Project ID filter (required unless using global_search)
+    /// * `layers` - Optional layer filter (e.g., Architecture + GlobalStandard)
     pub async fn search(
         &self,
         query_vector: Vec<f32>,
         limit: u64,
-        project_id: Option<&str>,
-        file_pattern: Option<&str>,
+        project_id: &str,
+        layers: Option<Vec<Layer>>,
     ) -> Result<Vec<SearchResult>> {
         // Build filter conditions
-        let mut conditions = Vec::new();
-
-        if let Some(pid) = project_id {
-            conditions.push(Condition::matches("project_id", pid.to_string()));
-        }
-
-        if let Some(pattern) = file_pattern {
-            conditions.push(Condition::matches("file_path", pattern.to_string()));
-        }
+        let must_conditions = vec![Condition::matches("project_id", project_id.to_string())];
 
         // Build search request
+        let search_builder = if let Some(layer_list) = layers {
+            // Create layer conditions (OR logic)
+            let layer_conditions: Vec<Condition> = layer_list
+                .iter()
+                .map(|l| Condition::matches("layer", l.as_str().to_string()))
+                .collect();
+
+            // Create a combined filter with must (project_id) and should (layers)
+            // Since qdrant-client doesn't support chaining, we need to construct the filter differently
+            // For now, let's use a simpler approach: match project_id in must, and use should for layers
+            let mut filter = Filter::must(must_conditions);
+            filter.should = layer_conditions;
+
+            SearchPointsBuilder::new(COLLECTION_NAME, query_vector, limit)
+                .with_payload(true)
+                .filter(filter)
+        } else {
+            // Just filter by project_id
+            SearchPointsBuilder::new(COLLECTION_NAME, query_vector, limit)
+                .with_payload(true)
+                .filter(Filter::must(must_conditions))
+        };
+
+        // Execute search
+        let results = self
+            .client
+            .search_points(search_builder)
+            .await
+            .context("Failed to search points")?;
+
+        // Convert to SearchResult
+        let search_results = results
+            .result
+            .into_iter()
+            .map(SearchResult::from_scored_point)
+            .collect();
+
+        Ok(search_results)
+    }
+
+    /// Global search across all projects (bypass project_id filter)
+    ///
+    /// Use this when you want to search across all indexed data.
+    ///
+    /// # Arguments
+    /// * `query_vector` - The query embedding vector
+    /// * `limit` - Maximum number of results to return
+    /// * `layers` - Optional layer filter
+    pub async fn global_search(
+        &self,
+        query_vector: Vec<f32>,
+        limit: u64,
+        layers: Option<Vec<Layer>>,
+    ) -> Result<Vec<SearchResult>> {
+        // Build search request (no project_id filter)
         let mut search_builder =
             SearchPointsBuilder::new(COLLECTION_NAME, query_vector, limit).with_payload(true);
 
-        if !conditions.is_empty() {
-            search_builder = search_builder.filter(Filter::must(conditions));
+        // Optional layer filtering (OR logic)
+        if let Some(layer_list) = layers {
+            let layer_conditions: Vec<Condition> = layer_list
+                .iter()
+                .map(|l| Condition::matches("layer", l.as_str().to_string()))
+                .collect();
+
+            if !layer_conditions.is_empty() {
+                search_builder = search_builder.filter(Filter::should(layer_conditions));
+            }
         }
 
         // Execute search
@@ -250,6 +409,13 @@ impl NexusBrain {
     }
 
     /// Search specifically for architecture-related content
+    ///
+    /// Filters by ProjectArchitecture and GlobalStandard layers.
+    ///
+    /// # Arguments
+    /// * `query_vector` - The query embedding vector
+    /// * `project_id` - Project ID to search within
+    /// * `limit` - Maximum number of results to return
     pub async fn search_architecture(
         &self,
         query_vector: Vec<f32>,
@@ -259,8 +425,8 @@ impl NexusBrain {
         self.search(
             query_vector,
             limit,
-            Some(project_id),
-            Some("Architecture.md"),
+            project_id,
+            Some(vec![Layer::ProjectArchitecture, Layer::GlobalStandard]),
         )
         .await
     }
@@ -390,17 +556,47 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_vector_metadata_creation() {
-        let metadata = VectorMetadata::new(
+    fn test_nexus_metadata_creation() {
+        let metadata = NexusMetadata::new(
             "nexus_cli".to_string(),
-            "src/main.rs".to_string(),
-            "sprint-5".to_string(),
+            Layer::SourceCode,
+            "fedora-workstation".to_string(),
+            Some(5),
+            "/home/user/repos/nexus_cli/src/main.rs".to_string(),
         );
 
         assert_eq!(metadata.project_id, "nexus_cli");
-        assert_eq!(metadata.file_path, "src/main.rs");
-        assert_eq!(metadata.sprint_context, "sprint-5");
+        assert_eq!(metadata.layer, Layer::SourceCode);
+        assert_eq!(metadata.machine_id, "fedora-workstation");
+        assert_eq!(metadata.sprint_number, Some(5));
+        assert_eq!(
+            metadata.file_path,
+            "/home/user/repos/nexus_cli/src/main.rs"
+        );
         assert!(metadata.indexed_at.is_some());
+    }
+
+    #[test]
+    fn test_layer_serialization() {
+        assert_eq!(Layer::GlobalStandard.as_str(), "GlobalStandard");
+        assert_eq!(Layer::ProjectArchitecture.as_str(), "ProjectArchitecture");
+        assert_eq!(Layer::SourceCode.as_str(), "SourceCode");
+        assert_eq!(Layer::SprintMemory.as_str(), "SprintMemory");
+    }
+
+    #[test]
+    fn test_layer_parsing() {
+        assert_eq!(
+            Layer::from_str("GlobalStandard"),
+            Some(Layer::GlobalStandard)
+        );
+        assert_eq!(
+            Layer::from_str("ProjectArchitecture"),
+            Some(Layer::ProjectArchitecture)
+        );
+        assert_eq!(Layer::from_str("SourceCode"), Some(Layer::SourceCode));
+        assert_eq!(Layer::from_str("SprintMemory"), Some(Layer::SprintMemory));
+        assert_eq!(Layer::from_str("Invalid"), None);
     }
 
     #[test]
