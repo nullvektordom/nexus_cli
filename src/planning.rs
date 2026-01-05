@@ -80,6 +80,7 @@ impl ValidationResult {
 ///
 /// # Memory Efficiency
 /// This function uses event-based streaming and does NOT load the entire file into memory.
+#[allow(dead_code)]
 pub fn validate_planning_document(
     file_path: &Path,
     heuristics: &GateHeuristics,
@@ -180,6 +181,175 @@ pub fn validate_planning_document(
     }
 
     Ok(result)
+}
+
+/// Validates a planning document with specific required headers (context-aware validation)
+///
+/// # Arguments
+/// * `file_path` - Path to the markdown file to validate
+/// * `required_headers` - Specific headers required for this file
+/// * `min_word_count` - Minimum word count per section
+/// * `illegal_strings` - Forbidden strings that indicate incomplete work
+///
+/// # Returns
+/// * `Ok(ValidationResult)` - Validation completed (may contain issues)
+/// * `Err` - File could not be read or parsed
+pub fn validate_planning_document_with_headers(
+    file_path: &Path,
+    required_headers: &[String],
+    min_word_count: usize,
+    illegal_strings: &[String],
+) -> Result<ValidationResult> {
+    let content = fs::read_to_string(file_path)
+        .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
+
+    let mut result = ValidationResult::new();
+    let parser = Parser::new(&content);
+
+    // Tracking state during streaming
+    let mut current_header: Option<String> = None;
+    let mut current_section_words: Vec<String> = Vec::new();
+    let mut found_headers: HashSet<String> = HashSet::new();
+    let mut line_number: usize = 1;
+
+    for event in parser {
+        match event {
+            Event::Start(Tag::Heading { .. }) => {
+                // Save previous section if exists
+                if let Some(ref header) = current_header {
+                    let word_count = current_section_words.len();
+                    result.sections.insert(header.clone(), word_count);
+
+                    // Check if section meets minimum length
+                    if word_count < min_word_count {
+                        result.add_issue(ValidationIssue::SectionTooShort {
+                            header: header.clone(),
+                            word_count,
+                            required: min_word_count,
+                        });
+                    }
+                }
+                // Reset for new section
+                current_section_words.clear();
+                current_header = None;
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                // Header text is now complete
+                if let Some(header_text) = current_header.as_ref() {
+                    found_headers.insert(header_text.clone());
+                }
+            }
+            Event::Text(text) => {
+                // If we're in a header, capture the header text
+                if current_header.is_none() {
+                    current_header = Some(text.to_string());
+                } else {
+                    // Count words in section content
+                    let words: Vec<&str> = text.split_whitespace().collect();
+                    for word in &words {
+                        current_section_words.push(word.to_string());
+                    }
+
+                    // Check for illegal strings (standalone placeholders only)
+                    for illegal in illegal_strings {
+                        // Check if it's a standalone placeholder (not part of a sentence)
+                        if is_standalone_placeholder(&text, illegal) {
+                            result.add_issue(ValidationIssue::IllegalString {
+                                string: illegal.clone(),
+                                context: text.chars().take(50).collect(),
+                                line_estimate: line_number,
+                            });
+                        }
+                    }
+
+                    // Estimate line numbers
+                    line_number += text.matches('\n').count();
+                }
+            }
+            Event::SoftBreak | Event::HardBreak => {
+                line_number += 1;
+            }
+            _ => {}
+        }
+    }
+
+    // Save final section
+    if let Some(header) = current_header {
+        let word_count = current_section_words.len();
+        result.sections.insert(header.clone(), word_count);
+
+        if word_count < min_word_count {
+            result.add_issue(ValidationIssue::SectionTooShort {
+                header: header.clone(),
+                word_count,
+                required: min_word_count,
+            });
+        }
+    }
+
+    // Check for missing required headers
+    for required_header in required_headers {
+        if !found_headers.contains(required_header) {
+            result.add_issue(ValidationIssue::MissingHeader {
+                header: required_header.clone(),
+            });
+        }
+    }
+
+    Ok(result)
+}
+
+/// Checks if a placeholder string is standalone (not part of a descriptive sentence)
+///
+/// # Arguments
+/// * `text` - The text to check
+/// * `placeholder` - The placeholder string (e.g., "TODO", "TBD")
+///
+/// # Returns
+/// * `true` if the placeholder is standalone, `false` if it's part of a sentence
+fn is_standalone_placeholder(text: &str, placeholder: &str) -> bool {
+    // Normalize to uppercase for comparison
+    let text_upper = text.to_uppercase();
+    let placeholder_upper = placeholder.to_uppercase();
+
+    if !text_upper.contains(&placeholder_upper) {
+        return false;
+    }
+
+    // Check if the placeholder appears alone or with minimal context
+    let trimmed = text.trim();
+
+    // Exact match or very short line (likely a placeholder)
+    if trimmed.len() <= placeholder.len() + 5 {
+        return true;
+    }
+
+    // Check for common placeholder patterns
+    // e.g., "TODO", "TODO:", "TODO -", "[TODO]", "(TODO)"
+    let patterns = [
+        placeholder_upper.to_string(),
+        format!("{}:", placeholder_upper),
+        format!("{} -", placeholder_upper),
+        format!("[{}]", placeholder_upper),
+        format!("({})", placeholder_upper),
+        format!("...{}", placeholder_upper),
+        format!("{}...", placeholder_upper),
+    ];
+
+    for pattern in &patterns {
+        if text_upper.contains(pattern) && trimmed.len() < 30 {
+            return true;
+        }
+    }
+
+    // If it's part of a longer sentence with many words, it's descriptive
+    let word_count = text.split_whitespace().count();
+    if word_count > 8 {
+        return false;
+    }
+
+    // Default: if short and contains placeholder, consider it standalone
+    trimmed.len() < 50
 }
 
 /// Validates a dashboard file for unchecked checkboxes using streaming parser
@@ -693,7 +863,7 @@ Not enough content.
             .iter()
             .filter(|i| matches!(i, ValidationIssue::SectionTooShort { .. }))
             .collect();
-        assert!(short_section_issues.len() > 0);
+        assert!(!short_section_issues.is_empty());
     }
 
     #[test]
