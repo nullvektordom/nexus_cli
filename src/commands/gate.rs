@@ -5,9 +5,12 @@
 
 use crate::config::NexusConfig;
 use crate::heuristics::load_heuristics;
-use crate::planning::{ValidationIssue, validate_dashboard_checkboxes, validate_planning_document};
+use crate::planning::{
+    validate_dashboard_checkboxes, validate_planning_document, ValidationIssue,
+};
 use anyhow::{Context, Result};
 use colored::Colorize;
+use std::fs;
 use std::path::Path;
 
 /// Execute the gate command
@@ -15,11 +18,39 @@ use std::path::Path;
 pub fn execute(project_path: &Path) -> Result<()> {
     // Load project configuration
     let config_path = project_path.join("nexus.toml");
-    let config_content = std::fs::read_to_string(&config_path)
+    let config_content = fs::read_to_string(&config_path)
         .with_context(|| format!("Failed to read config from: {}", config_path.display()))?;
     let config: NexusConfig = toml::from_str(&config_content)
         .with_context(|| format!("Failed to parse config from: {}", config_path.display()))?;
 
+    // Check project state for context-aware validation
+    if let Some(state) = &config.state {
+        if state.is_unlocked {
+            // Project is unlocked, check for active sprint
+            if let Some(active_sprint) = &state.active_sprint {
+                if active_sprint.status == "in_progress" {
+                    return validate_sprint_phase(&config, &active_sprint.current);
+                } else {
+                    println!("{}", "ℹ️  No active sprint in progress.".yellow());
+                    println!("   Project is unlocked but no sprint is currently active.");
+                    println!("   To start a sprint, use: nexus sprint . <number>");
+                    return Ok(());
+                }
+            } else {
+                println!("{}", "ℹ️  Project is unlocked.".yellow());
+                println!("   No active sprint found.");
+                println!("   To start a sprint, use: nexus sprint . <number>");
+                return Ok(());
+            }
+        }
+    }
+
+    // Default: Validate Init Phase (Planning + Dashboard)
+    validate_init_phase(&config)
+}
+
+/// Validate the initialization phase (Planning Docs + Dashboard)
+fn validate_init_phase(config: &NexusConfig) -> Result<()> {
     // Resolve obsidian vault path
     let vault_path = config.get_repo_path();
 
@@ -158,7 +189,7 @@ pub fn execute(project_path: &Path) -> Result<()> {
         );
     } else {
         // Scan all markdown files in planning directory
-        let planning_files = std::fs::read_dir(&planning_dir)
+        let planning_files = fs::read_dir(&planning_dir)
             .with_context(|| {
                 format!(
                     "Failed to read planning directory: {}",
@@ -274,6 +305,174 @@ pub fn execute(project_path: &Path) -> Result<()> {
         println!("{}", "   Fix the issues above before proceeding.".red());
         println!();
         anyhow::bail!("Validation failed")
+    }
+}
+
+/// Validate the Sprint Phase
+///
+/// Checks:
+/// - Tasks.md (all items checked)
+/// - Sprint-Context.md (existence)
+fn validate_sprint_phase(config: &NexusConfig, current_sprint: &str) -> Result<()> {
+    let vault_path = config.get_repo_path();
+    // Use configured sprint directory or fallback to standard location
+    let sprint_dir_rel = if config.structure.sprint_dir.is_empty() {
+        // Fallback if not configured (though it should be)
+        Path::new(&config.structure.management_dir).join("sprints")
+    } else {
+        Path::new(&config.structure.sprint_dir).to_path_buf()
+    };
+
+    let sprints_dir = vault_path.join(sprint_dir_rel);
+
+    println!("{}", "🚪 INITIATING SPRINT GATE SEQUENCE...".bold().cyan());
+    println!("{}", format!("   Target: {}", current_sprint).cyan());
+    println!();
+
+    // Find the sprint folder (e.g., "sprint-4-title" matching "sprint-4")
+    // We match "sprint-4-" to avoid matching "sprint-40" when looking for "sprint-4"
+    let target_prefix = format!("{}-", current_sprint);
+
+    let sprint_folder = if sprints_dir.exists() {
+        fs::read_dir(&sprints_dir)
+            .with_context(|| {
+                format!(
+                    "Failed to read sprints directory: {}",
+                    sprints_dir.display()
+                )
+            })?
+            .filter_map(|e| e.ok())
+            .find(|e| {
+                let name = e.file_name().to_string_lossy().to_string();
+                // Match "sprint-4-*" OR exact "sprint-4" (unlikely but possible)
+                name == current_sprint || name.starts_with(&target_prefix)
+            })
+            .map(|e| e.path())
+    } else {
+        None
+    };
+
+    let sprint_folder = match sprint_folder {
+        Some(path) => path,
+        None => {
+            anyhow::bail!(
+                "Sprint folder not found for: {}\n  \
+                 Expected a folder starting with {} in {}",
+                current_sprint,
+                current_sprint,
+                sprints_dir.display()
+            );
+        }
+    };
+
+    println!(
+        "   Found sprint workspace: {}",
+        sprint_folder
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .dimmed()
+    );
+    println!();
+
+    let mut all_passed = true;
+
+    // 1. Validate Tasks.md
+    println!("{}", "📋 SCANNING SPRINT TASKS...".bold());
+    let tasks_path = sprint_folder.join("Tasks.md");
+
+    if !tasks_path.exists() {
+        all_passed = false;
+        println!(
+            "  {} Tasks file not found: {}",
+            "✗".red().bold(),
+            tasks_path.display()
+        );
+    } else {
+        match validate_dashboard_checkboxes(&tasks_path) {
+            Ok(result) => {
+                if result.passed {
+                    println!(
+                        "  {} All tasks completed",
+                        "✓".green().bold()
+                    );
+                } else {
+                    all_passed = false;
+                    println!("  {} Unchecked tasks found:", "✗".red().bold());
+                    print_validation_issues(&result.issues, &tasks_path);
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!(
+                    "  {} Failed to read tasks file: {}",
+                    "✗".red().bold(),
+                    e
+                );
+            }
+        }
+    }
+
+    println!();
+
+    // 2. Validate Sprint-Context.md
+    println!("{}", "📝 SCANNING SPRINT CONTEXT...".bold());
+    let context_path = sprint_folder.join("Sprint-Context.md");
+
+    if !context_path.exists() {
+        all_passed = false;
+        println!(
+            "  {} Sprint Context file not found: {}",
+            "✗".red().bold(),
+            context_path.display()
+        );
+    } else {
+        // Basic check: is it empty?
+        match fs::metadata(&context_path) {
+            Ok(metadata) => {
+                if metadata.len() == 0 {
+                    all_passed = false;
+                    println!(
+                        "  {} Sprint Context file is empty",
+                        "✗".red().bold()
+                    );
+                } else {
+                    println!(
+                        "  {} Sprint Context present",
+                        "✓".green().bold()
+                    );
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!(
+                    "  {} Cannot access Sprint Context: {}",
+                    "✗".red().bold(),
+                    e
+                );
+            }
+        }
+    }
+
+    println!();
+    println!("{}", "━".repeat(60).dimmed());
+
+    // Final verdict
+    if all_passed {
+        println!();
+        println!("{}", "✅ SPRINT COMPLETE".green().bold());
+        println!(
+            "{}",
+            "   Gate is open. All sprint tasks verified.".green()
+        );
+        println!();
+        Ok(())
+    } else {
+        println!();
+        println!("{}", "🚫 SPRINT INCOMPLETE".red().bold());
+        println!("{}", "   Complete all tasks before finishing the sprint.".red());
+        println!();
+        anyhow::bail!("Sprint validation failed")
     }
 }
 

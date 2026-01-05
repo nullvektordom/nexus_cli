@@ -1,0 +1,10 @@
+pub mod brain;
+pub mod commands;
+pub mod config;
+pub mod git_ops;
+pub mod heuristics;
+pub mod planning;
+pub mod scaffolding;
+pub mod state;
+pub mod templating;
+pub mod watcher;
