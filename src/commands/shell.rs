@@ -26,6 +26,17 @@ pub fn execute() -> Result<()> {
     // Save initial state
     state.save(&state_file)?;
 
+    // Initialize embeddings (local ONNX model for semantic search)
+    if let Err(e) = crate::embeddings::initialize_embeddings("models/model.onnx", "models/tokenizer.json") {
+        eprintln!("{}", "Warning: Failed to initialize embeddings:".yellow());
+        eprintln!("  {}", e);
+        eprintln!("{}", "  Semantic search will be degraded. Planning Catalyst features will use zero vectors.".yellow());
+        eprintln!();
+    } else {
+        eprintln!("{}", "✓ Embeddings initialized (all-MiniLM-L6-v2 via ONNX)".green());
+        eprintln!();
+    }
+
     // Print welcome banner
     print_banner(&state)?;
 
@@ -36,21 +47,29 @@ pub fn execute() -> Result<()> {
     // Track last gate error for "why" command
     let last_gate_error: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
 
+    // Context injection toggle (enabled by default)
+    let context_enabled = Arc::new(Mutex::new(true));
+
     // Initialize REPL
     let mut rl = DefaultEditor::new().context("Failed to initialize readline editor")?;
 
     // REPL loop
     loop {
-        // Dynamic prompt based on active project and watcher status
+        // Dynamic prompt based on active project, watcher, and context status
         let prompt = if let Some(ref project) = state.active_project_id {
             let watch_indicator = if *watcher_enabled.lock().unwrap() {
                 "👁"
             } else {
                 ""
             };
+            let context_indicator = if *context_enabled.lock().unwrap() {
+                "🧠"
+            } else {
+                ""
+            };
             format!(
                 "{} ",
-                format!("nexus:{}{}❯", project, watch_indicator)
+                format!("nexus:{}{}{}❯", project, watch_indicator, context_indicator)
                     .cyan()
                     .bold()
             )
@@ -83,6 +102,7 @@ pub fn execute() -> Result<()> {
                     &watcher,
                     &watcher_enabled,
                     &last_gate_error,
+                    &context_enabled,
                 ) {
                     eprintln!("{} {}", "Error:".red().bold(), e);
                 }
@@ -157,9 +177,13 @@ fn print_banner(state: &NexusState) -> Result<()> {
     println!();
     println!(
         "{}",
-        "Available commands: use, gate, unlock, sprint, status, help, exit".dimmed()
+        "Available commands: use, gate, unlock, sprint, status, context, help, exit".dimmed()
     );
     println!("{}", "Type 'help' for more information.".dimmed());
+    println!(
+        "{}",
+        "💡 Natural language queries with context injection enabled by default!".dimmed()
+    );
     println!();
 
     Ok(())
@@ -172,6 +196,7 @@ fn execute_command(
     watcher: &Arc<Mutex<Option<SentinelWatcher>>>,
     watcher_enabled: &Arc<Mutex<bool>>,
     last_gate_error: &Arc<Mutex<Option<String>>>,
+    context_enabled: &Arc<Mutex<bool>>,
 ) -> Result<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();
 
@@ -199,6 +224,7 @@ fn execute_command(
         "watch" => execute_watch(state, watcher, watcher_enabled),
         "unwatch" => execute_unwatch(watcher, watcher_enabled),
         "why" => execute_why(state, last_gate_error),
+        "context" => execute_context(args, context_enabled),
         "clear" | "cls" => {
             print!("\x1B[2J\x1B[1;1H");
             Ok(())
@@ -221,8 +247,16 @@ fn execute_command(
             Ok(())
         }
         _ => {
-            // Treat as semantic query
-            execute_semantic_query(input, state)
+            // Check if LLM is enabled and context is enabled for natural language processing
+            let is_context_enabled = *context_enabled.lock().unwrap();
+
+            if is_context_enabled {
+                // Treat as natural language query with context injection
+                execute_llm_query(input, state)
+            } else {
+                // Fall back to semantic query (vector search only)
+                execute_semantic_query(input, state)
+            }
         }
     }
 }
@@ -263,6 +297,11 @@ fn print_help() {
         "why".cyan()
     );
     println!();
+    println!(
+        "  {} <on|off>  Toggle context injection for LLM queries (default: on)",
+        "context".cyan()
+    );
+    println!();
     println!("  {}         Show this help message", "help".cyan());
     println!("  {}        Clear the screen", "clear".cyan());
     println!("  {}  | {}  Exit the shell", "exit".cyan(), "quit".cyan());
@@ -279,6 +318,25 @@ fn print_help() {
     println!(
         "{}",
         "  Example: 'safety rules --arch' or 'error handling --global'".dimmed()
+    );
+    println!();
+    println!("{}", "Planning Catalyst:".bold().underline());
+    println!();
+    println!(
+        "{}",
+        "  🧠 Natural language queries use DeepSeek R1 (deepseek/deepseek-r1) by default".dimmed()
+    );
+    println!(
+        "{}",
+        "  🔍 Architecture snippets filtered by relevance (score ≥ 0.75)".dimmed()
+    );
+    println!(
+        "{}",
+        "  💾 Last 5 conversation turns saved to .nexus_history.json".dimmed()
+    );
+    println!(
+        "{}",
+        "  🎯 Local embeddings via ONNX (all-MiniLM-L6-v2) for semantic search".dimmed()
     );
     println!();
 }
@@ -801,6 +859,215 @@ fn execute_semantic_query(input: &str, state: &NexusState) -> Result<()> {
 
         println!("   {}", result.content);
         println!();
+    }
+
+    Ok(())
+}
+
+/// Execute the context command - toggle context injection
+fn execute_context(args: &[&str], context_enabled: &Arc<Mutex<bool>>) -> Result<()> {
+    if args.is_empty() {
+        // Show current status
+        let is_enabled = *context_enabled.lock().unwrap();
+        println!(
+            "{} Context injection is currently {}",
+            if is_enabled { "🧠" } else { "  " },
+            if is_enabled {
+                "enabled".green()
+            } else {
+                "disabled".red()
+            }
+        );
+        println!();
+        println!("  Use 'context on' to enable or 'context off' to disable");
+        return Ok(());
+    }
+
+    match args[0].to_lowercase().as_str() {
+        "on" | "enable" | "true" => {
+            *context_enabled.lock().unwrap() = true;
+            println!("{} Context injection enabled", "🧠".green().bold());
+            println!("  Natural language queries will now include:");
+            println!("    • Top 3 architecture snippets from Qdrant");
+            println!("    • Active sprint context from Obsidian");
+        }
+        "off" | "disable" | "false" => {
+            *context_enabled.lock().unwrap() = false;
+            println!("{} Context injection disabled", "✓".yellow().bold());
+            println!("  Queries will fall back to simple semantic search");
+        }
+        _ => {
+            anyhow::bail!("Invalid argument. Use 'context on' or 'context off'");
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute an LLM query with context injection and conversation history
+fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
+    use crate::context::{get_active_context, ContextTemplate, RELEVANCE_THRESHOLD};
+    use crate::history::ConversationHistory;
+    use crate::llm::{LlmClient, LlmProvider};
+
+    let project_id = state
+        .active_project_id
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No active project. Use 'use <project>' first."))?;
+
+    let repo_path = state
+        .get_active_repo_path()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get repo path"))?;
+
+    let obsidian_path = state
+        .get_active_obsidian_path()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get Obsidian path"))?;
+
+    // Load conversation history
+    let mut history = ConversationHistory::load(&obsidian_path, project_id)?;
+
+    // Load project config
+    let config_path = repo_path.join("nexus.toml");
+    if !config_path.exists() {
+        anyhow::bail!(
+            "No nexus.toml found. LLM not configured.\nRun 'help' to see available commands."
+        );
+    }
+
+    let config_content = std::fs::read_to_string(&config_path)?;
+    let config: NexusConfig = toml::from_str(&config_content)?;
+
+    // Check if LLM is configured
+    let llm_config = config.llm.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "LLM not configured. Add [llm] section to nexus.toml:\n\n\
+            [llm]\n\
+            provider = \"openrouter\"  # Default (cost-effective), or \"claude\"/\"gemini\"\n\
+            model = \"deepseek/deepseek-r1\"  # Default model\n\
+            enabled = true\n\n\
+            Set your API key via environment variable:\n\
+            export OPENROUTER_API_KEY=\"your-key\"  # for OpenRouter (default)\n\
+            export ANTHROPIC_API_KEY=\"your-key\"   # for Claude\n\
+            export GOOGLE_API_KEY=\"your-key\"      # for Gemini"
+        )
+    })?;
+
+    if !llm_config.enabled {
+        anyhow::bail!("LLM is disabled. Set 'enabled = true' in [llm] section of nexus.toml");
+    }
+
+    // Get API key from environment or config
+    let api_key = match llm_config.provider.as_str() {
+        "openrouter" => std::env::var("OPENROUTER_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("OPENROUTER_API_KEY not set"))
+            })?,
+        "claude" | "anthropic" => std::env::var("ANTHROPIC_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))
+            })?,
+        "gemini" | "google" => std::env::var("GOOGLE_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("GOOGLE_API_KEY not set"))
+            })?,
+        _ => anyhow::bail!("Unknown LLM provider: {}", llm_config.provider),
+    };
+
+    println!("{}", "🧠 Retrieving context...".cyan());
+
+    // Check if Brain is configured for architecture context
+    let brain_config = config.brain.as_ref();
+    let qdrant_url = if let Some(brain) = brain_config {
+        if brain.enabled {
+            Some(brain.qdrant_url.clone())
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Run async context retrieval and LLM call
+    let runtime = tokio::runtime::Runtime::new()?;
+    let result = runtime.block_on(async {
+        // Get active context (architecture + sprint)
+        let context = if let Some(ref url) = qdrant_url {
+            get_active_context(input, project_id, url, &obsidian_path, &config).await?
+        } else {
+            // No brain configured, create empty context
+            println!("  {} Brain not configured, skipping architecture context", "⚠".yellow());
+            crate::context::ActiveContext {
+                architecture: crate::context::ArchitectureContext {
+                    snippets: Vec::new(),
+                },
+                sprint: None,
+            }
+        };
+
+        // Show context summary
+        if !context.architecture.snippets.is_empty() {
+            println!(
+                "  {} Retrieved {} architecture snippets (score ≥ {})",
+                "✓".green(),
+                context.architecture.snippets.len(),
+                RELEVANCE_THRESHOLD
+            );
+        } else {
+            println!(
+                "  {} No architecture snippets above threshold ({})",
+                "⚠".yellow(),
+                RELEVANCE_THRESHOLD
+            );
+        }
+
+        if let Some(ref sprint) = context.sprint {
+            println!("  {} Retrieved sprint context: {}", "✓".green(), sprint.sprint_id);
+        }
+
+        // Build context template
+        let template = ContextTemplate::new(context, input.to_string());
+        let mut prompt = template.render();
+
+        // Prepend conversation history if available
+        if !history.is_empty() {
+            let history_context = history.get_context_string();
+            prompt = format!("{}\n{}", history_context, prompt);
+            println!("  {} Included {} previous conversation turns", "✓".green(), history.len());
+        }
+
+        // Create LLM client
+        let provider = LlmProvider::from_str(&llm_config.provider)
+            .ok_or_else(|| anyhow::anyhow!("Invalid LLM provider: {}", llm_config.provider))?;
+
+        let client = LlmClient::new(provider, api_key, llm_config.model.clone());
+
+        println!();
+        println!("{}", "🤖 Querying LLM...".cyan());
+        println!();
+
+        // Send to LLM
+        let response = client.complete(&prompt).await?;
+
+        Ok::<String, anyhow::Error>(response)
+    })?;
+
+    // Print response
+    println!("{}", result);
+    println!();
+
+    // Save conversation turn to history
+    history.add_turn(input.to_string(), Some(result.clone()));
+    if let Err(e) = history.save(&obsidian_path) {
+        eprintln!("Warning: Failed to save conversation history: {}", e);
     }
 
     Ok(())
