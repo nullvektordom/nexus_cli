@@ -177,7 +177,7 @@ fn print_banner(state: &NexusState) -> Result<()> {
     println!();
     println!(
         "{}",
-        "Available commands: use, gate, unlock, sprint, status, context, help, exit".dimmed()
+        "Available commands: use, gate, unlock, sprint, catalyst, status, context, help, exit".dimmed()
     );
     println!("{}", "Type 'help' for more information.".dimmed());
     println!(
@@ -221,6 +221,7 @@ fn execute_command(
         "unlock" => execute_unlock(state),
         "sprint" => execute_sprint(state, args),
         "status" => execute_status(state),
+        "catalyst" => execute_catalyst(state, args),
         "watch" => execute_watch(state, watcher, watcher_enabled),
         "unwatch" => execute_unwatch(watcher, watcher_enabled),
         "why" => execute_why(state, last_gate_error),
@@ -305,6 +306,15 @@ fn print_help() {
     println!("  {}         Show this help message", "help".cyan());
     println!("  {}        Clear the screen", "clear".cyan());
     println!("  {}  | {}  Exit the shell", "exit".cyan(), "quit".cyan());
+    println!();
+    println!("{}", "Planning Catalyst:".bold().underline());
+    println!();
+    println!("  {} <cmd>  AI-powered planning document generation", "catalyst".cyan());
+    println!("    {} scope      Generate scope document", "catalyst".dimmed());
+    println!("    {} stack      Generate tech stack document", "catalyst".dimmed());
+    println!("    {} arch       Generate architecture document", "catalyst".dimmed());
+    println!("    {} mvp        Generate MVP breakdown document", "catalyst".dimmed());
+    println!("    {} generate   Generate all documents (02-05)", "catalyst".dimmed());
     println!();
     println!("{}", "Semantic Search Flags:".bold().underline());
     println!();
@@ -435,6 +445,156 @@ fn execute_sprint(state: &NexusState, args: &[&str]) -> Result<()> {
         format!("Activating sprint {}...", sprint_number).dimmed()
     );
     crate::commands::sprint::execute(&project_path, sprint_number)
+}
+
+/// Execute the catalyst command - AI-powered planning document generation
+fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
+    use crate::catalyst::CatalystEngine;
+    use crate::llm::{LlmClient, LlmProvider};
+
+    let project_id = state
+        .active_project_id
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("No active project. Use 'use <project>' first."))?;
+
+    let obsidian_path = state
+        .get_active_obsidian_path()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get Obsidian path"))?;
+
+    let repo_path = state
+        .get_active_repo_path()
+        .ok_or_else(|| anyhow::anyhow!("Failed to get repo path"))?;
+
+    // Load config
+    let config_path = repo_path.join("nexus.toml");
+    if !config_path.exists() {
+        anyhow::bail!(
+            "No nexus.toml found for this project.\nExpected at: {}",
+            config_path.display()
+        );
+    }
+
+    let config_content = std::fs::read_to_string(&config_path)
+        .with_context(|| format!("Failed to read config from: {}", config_path.display()))?;
+    let config: NexusConfig = toml::from_str(&config_content)
+        .with_context(|| format!("Failed to parse config from: {}", config_path.display()))?;
+
+    // Verify LLM is configured
+    let llm_config = config.llm.as_ref().ok_or_else(|| {
+        anyhow::anyhow!(
+            "LLM not configured. Add [llm] section to nexus.toml:\n\n\
+            [llm]\n\
+            provider = \"openrouter\"\n\
+            model = \"deepseek/deepseek-r1\"\n\
+            enabled = true\n\n\
+            Set your API key:\n\
+            export OPENROUTER_API_KEY=\"your-key\""
+        )
+    })?;
+
+    if !llm_config.enabled {
+        anyhow::bail!("LLM is disabled. Set 'enabled = true' in [llm] section");
+    }
+
+    // Get API key from environment
+    let api_key = match llm_config.provider.as_str() {
+        "openrouter" => std::env::var("OPENROUTER_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("OPENROUTER_API_KEY not set"))
+            })?,
+        "claude" | "anthropic" => std::env::var("ANTHROPIC_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))
+            })?,
+        "gemini" | "google" => std::env::var("GOOGLE_API_KEY")
+            .or_else(|_| {
+                llm_config
+                    .api_key
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("GOOGLE_API_KEY not set"))
+            })?,
+        _ => anyhow::bail!("Unknown LLM provider: {}", llm_config.provider),
+    };
+
+    // Create runtime for async operations
+    let runtime = tokio::runtime::Runtime::new()?;
+
+    runtime.block_on(async {
+        // Create LLM client
+        let provider = LlmProvider::from_str(&llm_config.provider)
+            .ok_or_else(|| anyhow::anyhow!("Invalid provider: {}", llm_config.provider))?;
+
+        let llm_client = LlmClient::new(provider, api_key, llm_config.model.clone());
+
+        // Create catalyst engine
+        let engine = CatalystEngine::new(
+            project_id.clone(),
+            obsidian_path.clone(),
+            llm_client,
+        )?;
+
+        // Execute subcommand
+        let subcommand = args.get(0).map(|s| s.to_lowercase());
+        match subcommand.as_deref() {
+            Some("scope") => engine.generate_scope().await,
+            Some("stack") => engine.generate_tech_stack().await,
+            Some("arch") | Some("architecture") => engine.generate_architecture().await,
+            Some("mvp") | Some("breakdown") => engine.generate_mvp_breakdown().await,
+            Some("generate") | Some("all") => {
+                let report = engine.generate_all().await?;
+                report.print_summary();
+                Ok(())
+            }
+            Some("help") | None => {
+                print_catalyst_help();
+                Ok(())
+            }
+            Some(cmd) => {
+                anyhow::bail!("Unknown catalyst command: '{}'. Use 'catalyst help' for usage.", cmd)
+            }
+        }
+    })
+}
+
+/// Print catalyst-specific help
+fn print_catalyst_help() {
+    println!("{}", "Planning Catalyst - AI Document Generation".bold().underline());
+    println!();
+    println!("{}", "Individual Document Generation:".bold());
+    println!("  {} scope      Generate 02-Scope-and-Boundaries.md", "catalyst".cyan());
+    println!("  {} stack      Generate 03-Tech-Stack.md", "catalyst".cyan());
+    println!("  {} arch       Generate 04-Architecture.md", "catalyst".cyan());
+    println!("  {} mvp        Generate 05-MVP-Breakdown.md", "catalyst".cyan());
+    println!();
+    println!("{}", "Sequential Generation:".bold());
+    println!("  {} generate   Generate all documents (02-05) sequentially", "catalyst".cyan());
+    println!("  {} all        Alias for 'generate'", "catalyst".cyan());
+    println!();
+    println!("{}", "Prerequisites:".bold());
+    println!("  • Complete 01-Problem-and-Vision.md manually");
+    println!("  • Configure LLM in nexus.toml ([llm] section)");
+    println!("  • Set OPENROUTER_API_KEY environment variable");
+    println!();
+    println!("{}", "Example workflows:".dimmed());
+    println!();
+    println!("  {} Sequential (recommended):", "Option 1:".bold());
+    println!("    1. Fill out 01-Problem-and-Vision.md in Obsidian");
+    println!("    2. Run 'catalyst generate' to create all documents");
+    println!("    3. Review and refine in Obsidian");
+    println!();
+    println!("  {} Step-by-step:", "Option 2:".bold());
+    println!("    1. Fill out 01-Problem-and-Vision.md");
+    println!("    2. Run 'catalyst scope'");
+    println!("    3. Review scope, then run 'catalyst stack'");
+    println!("    4. Review stack, then run 'catalyst arch'");
+    println!("    5. Review architecture, then run 'catalyst mvp'");
+    println!();
 }
 
 /// Execute the status command - check Brain health

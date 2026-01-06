@@ -64,6 +64,118 @@ impl LlmClient {
         }
     }
 
+    /// Send a prompt with system message to the LLM and get a response
+    ///
+    /// # Arguments
+    /// * `system_prompt` - The system prompt to set context
+    /// * `user_prompt` - The user prompt
+    ///
+    /// # Returns
+    /// The LLM's text response
+    pub async fn complete_with_system(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String> {
+        match self.provider {
+            LlmProvider::OpenRouter => {
+                self.complete_openrouter_with_system(system_prompt, user_prompt)
+                    .await
+            }
+            LlmProvider::Claude => {
+                self.complete_claude_with_system(system_prompt, user_prompt)
+                    .await
+            }
+            LlmProvider::Gemini => {
+                // Gemini doesn't have system messages, so prepend to user message
+                let combined = format!("{}\n\n{}", system_prompt, user_prompt);
+                self.complete_gemini(&combined).await
+            }
+        }
+    }
+
+    /// Send a prompt with system message to OpenRouter API
+    async fn complete_openrouter_with_system(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String> {
+        #[derive(Serialize)]
+        struct OpenRouterRequest {
+            model: String,
+            messages: Vec<OpenRouterMessage>,
+            max_tokens: Option<u32>,
+        }
+
+        #[derive(Serialize)]
+        struct OpenRouterMessage {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct OpenRouterResponse {
+            choices: Vec<OpenRouterChoice>,
+        }
+
+        #[derive(Deserialize)]
+        struct OpenRouterChoice {
+            message: OpenRouterResponseMessage,
+        }
+
+        #[derive(Deserialize)]
+        struct OpenRouterResponseMessage {
+            content: String,
+        }
+
+        let request = OpenRouterRequest {
+            model: self.model.clone(),
+            messages: vec![
+                OpenRouterMessage {
+                    role: "system".to_string(),
+                    content: system_prompt.to_string(),
+                },
+                OpenRouterMessage {
+                    role: "user".to_string(),
+                    content: user_prompt.to_string(),
+                },
+            ],
+            max_tokens: Some(4096),
+        };
+
+        let response = self
+            .http_client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .header("HTTP-Referer", "https://github.com/nullvektordom/nexus_cli")
+            .header("X-Title", "Nexus CLI")
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send request to OpenRouter API")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read error response".to_string());
+            anyhow::bail!("OpenRouter API error ({}): {}", status, error_text);
+        }
+
+        let openrouter_response: OpenRouterResponse = response
+            .json()
+            .await
+            .context("Failed to parse OpenRouter API response")?;
+
+        openrouter_response
+            .choices
+            .first()
+            .map(|c| c.message.content.clone())
+            .ok_or_else(|| anyhow::anyhow!("No content in OpenRouter response"))
+    }
+
     /// Send a prompt to OpenRouter API (OpenAI-compatible format)
     async fn complete_openrouter(&self, prompt: &str) -> Result<String> {
         #[derive(Serialize)]
@@ -134,6 +246,78 @@ impl LlmClient {
             .first()
             .map(|c| c.message.content.clone())
             .ok_or_else(|| anyhow::anyhow!("No content in OpenRouter response"))
+    }
+
+    /// Send a prompt with system message to Claude API
+    async fn complete_claude_with_system(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String> {
+        #[derive(Serialize)]
+        struct ClaudeRequest {
+            model: String,
+            max_tokens: u32,
+            system: String,
+            messages: Vec<ClaudeMessage>,
+        }
+
+        #[derive(Serialize)]
+        struct ClaudeMessage {
+            role: String,
+            content: String,
+        }
+
+        #[derive(Deserialize)]
+        struct ClaudeResponse {
+            content: Vec<ClaudeContent>,
+        }
+
+        #[derive(Deserialize)]
+        struct ClaudeContent {
+            text: String,
+        }
+
+        let request = ClaudeRequest {
+            model: self.model.clone(),
+            max_tokens: 4096,
+            system: system_prompt.to_string(),
+            messages: vec![ClaudeMessage {
+                role: "user".to_string(),
+                content: user_prompt.to_string(),
+            }],
+        };
+
+        let response = self
+            .http_client
+            .post("https://api.anthropic.com/v1/messages")
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send request to Claude API")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read error response".to_string());
+            anyhow::bail!("Claude API error ({}): {}", status, error_text);
+        }
+
+        let claude_response: ClaudeResponse = response
+            .json()
+            .await
+            .context("Failed to parse Claude API response")?;
+
+        claude_response
+            .content
+            .first()
+            .map(|c| c.text.clone())
+            .ok_or_else(|| anyhow::anyhow!("No content in Claude response"))
     }
 
     /// Send a prompt to Claude API
