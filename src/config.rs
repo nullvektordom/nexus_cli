@@ -1,6 +1,32 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+// Forward declarations of config structs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TasksConfig {
+    /// Task mode: "sprint" (default) or "adhoc"
+    #[serde(default = "default_task_mode")]
+    pub mode: String,
+    /// Path to adhoc planning directory (relative to management_dir)
+    #[serde(default = "default_adhoc_planning_dir")]
+    pub adhoc_planning_dir: String,
+    /// Path to adhoc dashboard (relative to management_dir)
+    #[serde(default = "default_adhoc_dashboard")]
+    pub adhoc_dashboard: String,
+}
+
+fn default_task_mode() -> String {
+    "sprint".to_string()
+}
+
+fn default_adhoc_planning_dir() -> String {
+    "adhoc-planning".to_string()
+}
+
+fn default_adhoc_dashboard() -> String {
+    "00-ADHOC-TASK.md".to_string()
+}
+
 /// Configuration structure for Nexus projects
 /// Stores project metadata and is serialized to/from TOML
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,6 +46,8 @@ pub struct NexusConfig {
     pub llm: Option<LlmConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub catalyst: Option<CatalystConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tasks: Option<TasksConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +194,7 @@ impl NexusConfig {
             brain: None,    // Brain is disabled by default, configure in nexus.toml
             llm: None,      // LLM is disabled by default, configure in nexus.toml
             catalyst: None, // Catalyst uses defaults if not configured
+            tasks: None,    // Tasks defaults to sprint mode if not configured
         }
     }
 
@@ -189,4 +218,185 @@ impl NexusConfig {
     pub fn from_toml(toml_str: &str) -> Result<Self, toml::de::Error> {
         toml::from_str(toml_str)
     }
+
+    /// Check if the project is in adhoc task mode
+    pub fn is_adhoc_mode(&self) -> bool {
+        self.tasks
+            .as_ref()
+            .map_or(false, |t| t.mode == "adhoc")
+    }
+
+    /// Get the full path to the adhoc planning directory
+    pub fn get_adhoc_planning_path(&self) -> PathBuf {
+        let planning_dir = self.tasks
+            .as_ref()
+            .map_or_else(|| "adhoc-planning".to_string(), |t| t.adhoc_planning_dir.clone());
+
+        self.get_repo_path()
+            .join(&self.structure.management_dir)
+            .join(planning_dir)
+    }
+
+    /// Get the full path to the adhoc dashboard
+    pub fn get_adhoc_dashboard_path(&self) -> PathBuf {
+        let dashboard = self.tasks
+            .as_ref()
+            .map_or_else(|| "00-ADHOC-TASK.md".to_string(), |t| t.adhoc_dashboard.clone());
+
+        self.get_repo_path()
+            .join(&self.structure.management_dir)
+            .join(dashboard)
+    }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tasks_config_defaults() {
+        let toml_without_tasks = r#"
+[project]
+name = "test"
+version = "0.1.0"
+obsidian_path = "/test"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/Sprints"
+
+[gate]
+heuristics_file = "Gate-Heuristics.json"
+strict_mode = true
+        "#;
+
+        let config = NexusConfig::from_toml(toml_without_tasks).unwrap();
+        assert!(!config.is_adhoc_mode());
+    }
+
+    #[test]
+    fn test_tasks_config_sprint_mode() {
+        let toml_sprint_mode = r#"
+[project]
+name = "test"
+version = "0.1.0"
+obsidian_path = "/test"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/Sprints"
+
+[gate]
+heuristics_file = "Gate-Heuristics.json"
+strict_mode = true
+
+[tasks]
+mode = "sprint"
+        "#;
+
+        let config = NexusConfig::from_toml(toml_sprint_mode).unwrap();
+        assert!(!config.is_adhoc_mode());
+    }
+
+    #[test]
+    fn test_tasks_config_adhoc_mode() {
+        let toml_adhoc_mode = r#"
+[project]
+name = "test"
+version = "0.1.0"
+obsidian_path = "/test"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/Sprints"
+
+[gate]
+heuristics_file = "Gate-Heuristics.json"
+strict_mode = true
+
+[tasks]
+mode = "adhoc"
+        "#;
+
+        let config = NexusConfig::from_toml(toml_adhoc_mode).unwrap();
+        assert!(config.is_adhoc_mode());
+    }
+
+    #[test]
+    fn test_adhoc_path_resolution() {
+        let toml_adhoc = r#"
+[project]
+name = "test"
+version = "0.1.0"
+obsidian_path = "/test/vault"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/Sprints"
+
+[gate]
+heuristics_file = "Gate-Heuristics.json"
+strict_mode = true
+
+[tasks]
+mode = "adhoc"
+adhoc_planning_dir = "my-adhoc-planning"
+adhoc_dashboard = "MY-TASK.md"
+        "#;
+
+        let config = NexusConfig::from_toml(toml_adhoc).unwrap();
+
+        let planning_path = config.get_adhoc_planning_path();
+        assert_eq!(
+            planning_path,
+            PathBuf::from("/test/vault/00-MANAGEMENT/my-adhoc-planning")
+        );
+
+        let dashboard_path = config.get_adhoc_dashboard_path();
+        assert_eq!(
+            dashboard_path,
+            PathBuf::from("/test/vault/00-MANAGEMENT/MY-TASK.md")
+        );
+    }
+
+    #[test]
+    fn test_adhoc_path_defaults() {
+        let toml_adhoc = r#"
+[project]
+name = "test"
+version = "0.1.0"
+obsidian_path = "/test"
+
+[structure]
+planning_dir = "01-PLANNING"
+management_dir = "00-MANAGEMENT"
+sprint_dir = "00-MANAGEMENT/Sprints"
+
+[gate]
+heuristics_file = "Gate-Heuristics.json"
+strict_mode = true
+
+[tasks]
+mode = "adhoc"
+        "#;
+
+        let config = NexusConfig::from_toml(toml_adhoc).unwrap();
+
+        let planning_path = config.get_adhoc_planning_path();
+        assert_eq!(
+            planning_path,
+            PathBuf::from("/test/00-MANAGEMENT/adhoc-planning")
+        );
+
+        let dashboard_path = config.get_adhoc_dashboard_path();
+        assert_eq!(
+            dashboard_path,
+            PathBuf::from("/test/00-MANAGEMENT/00-ADHOC-TASK.md")
+        );
+    }
+}
+

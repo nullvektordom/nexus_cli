@@ -63,34 +63,17 @@ pub fn execute(project_path: &Path) -> Result<()> {
         }
     }
 
-    // Load heuristics
-    let heuristics_path = vault_path.join(&config.gate.heuristics_file);
-
-    // DEFENSIVE: Check if heuristics file exists
-    if !heuristics_path.exists() {
-        anyhow::bail!(
-            "Heuristics file not found: {}\n  \
-             Check the 'heuristics_file' path in your nexus.toml configuration.",
-            heuristics_path.display()
-        );
-    }
-
-    let heuristics = load_heuristics(&heuristics_path).with_context(|| {
-        format!(
-            "Failed to parse heuristics file: {}",
-            heuristics_path.display()
-        )
-    })?;
-
     println!("{}", "🚪 INITIATING GATE SEQUENCE...".bold().cyan());
     println!();
 
-    // Check lifecycle state
+    // Check lifecycle state and mode
     let is_unlocked = config
         .state
         .as_ref()
         .is_some_and(|s| s.is_unlocked);
-    let phase_label = if is_unlocked {
+    let phase_label = if config.is_adhoc_mode() {
+        "ADHOC MODE: TASK PLANNING"
+    } else if is_unlocked {
         "PHASE 2: ACTIVE SPRINT"
     } else {
         "PHASE 1: PLANNING"
@@ -98,13 +81,37 @@ pub fn execute(project_path: &Path) -> Result<()> {
     println!("{} {}", "📍 Lifecycle Phase:".bold(), phase_label.yellow());
     println!();
 
-    // Phase-specific validation
-    let all_passed = if is_unlocked {
-        // PHASE 2: Active Sprint Validation
-        validate_active_sprint(&vault_path, &config)?
+    // Mode and phase-specific validation
+    let all_passed = if config.is_adhoc_mode() {
+        // ADHOC MODE: Validate adhoc planning documents
+        validate_adhoc_planning(&vault_path, &config)?
     } else {
-        // PHASE 1: Planning Document Validation
-        validate_planning_phase(&vault_path, &config, &heuristics)?
+        // Sprint mode - load heuristics file
+        let heuristics_path = vault_path.join(&config.gate.heuristics_file);
+
+        // DEFENSIVE: Check if heuristics file exists
+        if !heuristics_path.exists() {
+            anyhow::bail!(
+                "Heuristics file not found: {}\n  \
+                 Check the 'heuristics_file' path in your nexus.toml configuration.",
+                heuristics_path.display()
+            );
+        }
+
+        let heuristics = load_heuristics(&heuristics_path).with_context(|| {
+            format!(
+                "Failed to parse heuristics file: {}",
+                heuristics_path.display()
+            )
+        })?;
+
+        if is_unlocked {
+            // PHASE 2: Active Sprint Validation
+            validate_active_sprint(&vault_path, &config)?
+        } else {
+            // PHASE 1: Planning Document Validation
+            validate_planning_phase(&vault_path, &config, &heuristics)?
+        }
     };
 
     println!();
@@ -420,6 +427,237 @@ fn validate_planning_phase(
             "  {} Planning directory not found: {}",
             "✗".red().bold(),
             planning_dir.display()
+        );
+    }
+
+    Ok(all_passed)
+}
+
+/// Validates adhoc planning documents for ad-hoc task mode
+fn validate_adhoc_planning(_vault_path: &Path, config: &NexusConfig) -> Result<bool> {
+    let mut all_passed = true;
+
+    // Load adhoc heuristics - embedded in binary for portability
+    const ADHOC_HEURISTICS_JSON: &str = include_str!("../../templates/adhoc/adhoc-gate-heuristics.json");
+    let heuristics: crate::heuristics::GateHeuristics = serde_json::from_str(ADHOC_HEURISTICS_JSON)
+        .context("Failed to parse embedded adhoc heuristics")?;
+
+    // Validate Dashboard (00-ADHOC-TASK.md) - Planning Phase only
+    println!("{}", "📋 SCANNING ADHOC DASHBOARD...".bold());
+    let dashboard_path = config.get_adhoc_dashboard_path();
+
+    if dashboard_path.exists() {
+        // Read dashboard content and filter for Planning Phase checkboxes only
+        match std::fs::read_to_string(&dashboard_path) {
+            Ok(content) => {
+                let mut planning_phase_section = false;
+                let mut unchecked_planning_items = Vec::new();
+                let mut line_num = 0;
+
+                for line in content.lines() {
+                    line_num += 1;
+                    let trimmed = line.trim();
+
+                    // Track which section we're in
+                    if trimmed.starts_with("## Planning Phase") {
+                        planning_phase_section = true;
+                    } else if trimmed.starts_with("## Execution Phase") || trimmed.starts_with("## ") {
+                        planning_phase_section = false;
+                    }
+
+                    // Check for unchecked checkboxes in Planning Phase
+                    if planning_phase_section && trimmed.starts_with("- [ ]") {
+                        let task_text = trimmed.strip_prefix("- [ ]").unwrap_or("").trim();
+                        unchecked_planning_items.push((line_num, task_text.to_string()));
+                    }
+                }
+
+                if unchecked_planning_items.is_empty() {
+                    println!(
+                        "  {} Dashboard planning phase complete",
+                        "✓".green().bold()
+                    );
+                } else {
+                    all_passed = false;
+                    println!("  {} Dashboard planning phase incomplete:", "✗".red().bold());
+                    for (line, task) in unchecked_planning_items {
+                        println!("      ▸ Unchecked task at line {line}");
+                        println!("         Task: {task}");
+                    }
+                    println!("      📍 File: {}", dashboard_path.display());
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!(
+                    "  {} Failed to read dashboard: {}",
+                    "✗".red().bold(),
+                    e
+                );
+            }
+        }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Dashboard not found: {}",
+            "✗".red().bold(),
+            dashboard_path.display()
+        );
+    }
+
+    println!();
+
+    // Validate Planning Documents
+    println!("{}", "📝 SCANNING ADHOC PLANNING DOCUMENTS...".bold());
+    let planning_dir = config.get_adhoc_planning_path();
+
+    if !planning_dir.exists() {
+        all_passed = false;
+        println!(
+            "  {} Planning directory not found: {}",
+            "✗".red().bold(),
+            planning_dir.display()
+        );
+        return Ok(all_passed);
+    }
+
+    let min_word_count = heuristics.min_section_length as usize;
+    let illegal_strings: Vec<String> = heuristics.illegal_strings.clone();
+
+    // Validate Task-Capture.md
+    let capture_path = planning_dir.join("Task-Capture.md");
+    if capture_path.exists() {
+        let required_headers = vec![
+            "Source".to_string(),
+            "Problem Statement".to_string(),
+            "Context".to_string(),
+            "Definition of Done".to_string(),
+        ];
+
+        match validate_planning_document_with_headers(
+            &capture_path,
+            &required_headers,
+            100, // Min 100 words total
+            &illegal_strings,
+        ) {
+            Ok(result) => {
+                if result.passed {
+                    println!("  {} Task-Capture.md", "✓".green().bold());
+                } else {
+                    all_passed = false;
+                    println!("  {} Task-Capture.md", "✗".red().bold());
+                    print_validation_issues(&result.issues, &capture_path);
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!("  {} Task-Capture.md - {}", "✗".red().bold(), e);
+            }
+        }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Task-Capture.md not found",
+            "✗".red().bold()
+        );
+    }
+
+    // Validate Task-Approach.md
+    let approach_path = planning_dir.join("Task-Approach.md");
+    if approach_path.exists() {
+        let required_headers = vec![
+            "Analysis".to_string(),
+            "Proposed Solution".to_string(),
+            "Risks".to_string(),
+            "Files to Modify".to_string(),
+        ];
+
+        match validate_planning_document_with_headers(
+            &approach_path,
+            &required_headers,
+            150, // Min 150 words total
+            &illegal_strings,
+        ) {
+            Ok(result) => {
+                if result.passed {
+                    println!("  {} Task-Approach.md", "✓".green().bold());
+                } else {
+                    all_passed = false;
+                    println!("  {} Task-Approach.md", "✗".red().bold());
+                    print_validation_issues(&result.issues, &approach_path);
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!("  {} Task-Approach.md - {}", "✗".red().bold(), e);
+            }
+        }
+
+        // Additional risk mitigation check
+        let content = std::fs::read_to_string(&approach_path).unwrap_or_default();
+        if !content.contains("## Risks") || (!content.contains("- [ ]") && !content.contains("- [x]")) {
+            all_passed = false;
+            println!(
+                "  {} Task-Approach.md missing risk mitigation checkboxes",
+                "✗".red().bold()
+            );
+        }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Task-Approach.md not found",
+            "✗".red().bold()
+        );
+    }
+
+    // Validate Task-Validation.md (structure only, don't require checkboxes checked)
+    let validation_path = planning_dir.join("Task-Validation.md");
+    if validation_path.exists() {
+        let required_headers = vec![
+            "Pre-Work".to_string(),
+            "Implementation".to_string(),
+            "Verification".to_string(),
+        ];
+
+        match validate_planning_document_with_headers(
+            &validation_path,
+            &required_headers,
+            min_word_count, // Use default min word count
+            &illegal_strings,
+        ) {
+            Ok(result) => {
+                if result.passed {
+                    println!("  {} Task-Validation.md", "✓".green().bold());
+                } else {
+                    all_passed = false;
+                    println!("  {} Task-Validation.md", "✗".red().bold());
+                    print_validation_issues(&result.issues, &validation_path);
+                }
+            }
+            Err(e) => {
+                all_passed = false;
+                println!("  {} Task-Validation.md - {}", "✗".red().bold(), e);
+            }
+        }
+
+        // Verify checkbox structure
+        let content = std::fs::read_to_string(&validation_path).unwrap_or_default();
+        let sections = ["Pre-Work", "Implementation", "Verification"];
+        for section in sections {
+            if !content.contains(&format!("## {section}")) {
+                all_passed = false;
+                println!(
+                    "  {} Task-Validation.md missing {} section",
+                    "✗".red().bold(),
+                    section
+                );
+            }
+        }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Task-Validation.md not found",
+            "✗".red().bold()
         );
     }
 

@@ -2,7 +2,8 @@
 name = "nexus_cli"
 version = "0.1.0"
 # Path to your Obsidian project root
-obsidian_path = "/home/nullvektor/obsidian/execution_helper/Projects/nexus_project"
+obsidian_path = "/home/nullvektor/obsidian/projects/nexus_cli"
+obsidian_adhoc_path = "/home/nullvektor/obsidian/work"
 
 [structure]
 planning_dir = "01-PLANNING"
@@ -18,7 +19,7 @@ strict_mode = true
 is_unlocked = false
 
 [state.active_sprint]
-current = "sprint-3"
+current = "sprint-7-adhoc-task-feature"
 status = "approved"
 
 [templates]
