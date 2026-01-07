@@ -1,8 +1,7 @@
-use assert_cmd::prelude::*;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use std::path::Path;
-use std::process::Command;
 use tempfile::tempdir;
 
 /// Create a test project with incomplete planning (should fail gate)
@@ -299,7 +298,7 @@ fn test_unlock_fails_if_gate_fails() -> Result<(), Box<dyn std::error::Error>> {
     let temp_dir = tempdir()?;
     setup_incomplete_project(temp_dir.path());
 
-    let mut cmd = Command::cargo_bin("nexus")?;
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("unlock").arg(temp_dir.path());
 
     cmd.assert()
@@ -321,7 +320,7 @@ fn test_unlock_succeeds_with_complete_planning() -> Result<(), Box<dyn std::erro
     let temp_dir = tempdir()?;
     setup_complete_project(temp_dir.path());
 
-    let mut cmd = Command::cargo_bin("nexus")?;
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("unlock").arg(temp_dir.path());
 
     cmd.assert()
@@ -356,12 +355,12 @@ fn test_unlock_is_idempotent() -> Result<(), Box<dyn std::error::Error>> {
     setup_complete_project(temp_dir.path());
 
     // First unlock
-    let mut cmd = Command::cargo_bin("nexus")?;
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("unlock").arg(temp_dir.path());
     cmd.assert().success();
 
     // Second unlock should still succeed (idempotent)
-    let mut cmd2 = Command::cargo_bin("nexus")?;
+    let mut cmd2 = cargo_bin_cmd!("nexus");
     cmd2.arg("unlock").arg(temp_dir.path());
     cmd2.assert()
         .success()

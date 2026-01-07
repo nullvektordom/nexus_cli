@@ -1151,7 +1151,7 @@ fn execute_context(args: &[&str], context_enabled: &Arc<Mutex<bool>>) -> Result<
 }
 
 /// Execute the decision command - store an architectural decision in Qdrant
-fn execute_decision(args: &[&str], state: &NexusState) -> Result<()> {
+fn execute_decision(args: &[&str], _state: &NexusState) -> Result<()> {
     use crate::memory::NexusMemory;
 
     if args.is_empty() {

@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -144,7 +144,7 @@ fn test_gate_passes_with_valid_documents() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -171,7 +171,7 @@ fn test_gate_fails_with_invalid_planning_docs() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -198,7 +198,7 @@ fn test_gate_fails_with_unchecked_dashboard() {
     create_invalid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -225,7 +225,7 @@ fn test_gate_shows_context_for_issues() {
     create_valid_dashboard(&management_dir.join("00-START-HERE.md"));
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -242,7 +242,7 @@ fn test_gate_fails_with_missing_config() {
     // Don't create config file
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
     cmd.assert()
@@ -317,7 +317,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
     ).unwrap();
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(&project_path);
 
     // Should fail because planning is incomplete
@@ -397,7 +397,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
     ).unwrap();
 
     // Run gate command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(&project_path);
 
     // Should pass because planning is complete

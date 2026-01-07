@@ -389,12 +389,6 @@ impl LlmClient {
             .ok_or_else(|| anyhow::anyhow!("No content in Claude response"))
     }
 
-    /// Send a prompt to Gemini API
-    async fn complete_gemini(&self, prompt: &str) -> Result<String> {
-        let (text, _) = self.complete_gemini_with_system("", prompt).await?;
-        Ok(text)
-    }
-
     /// Send a prompt with system message to Gemini API
     pub async fn complete_gemini_full(
         &self,
@@ -465,12 +459,10 @@ impl LlmClient {
         }
 
         // If we have a previous thought signature, it should be in the last model message
-        if let Some(sig) = previous_thought_signature {
-            if let Some(last_model) = contents.iter_mut().rev().find(|c| c.role.as_deref() == Some("model")) {
-                if let Some(part) = last_model.parts.first_mut() {
-                    part.thought_signature = Some(sig);
-                }
-            }
+        if let Some(sig) = previous_thought_signature
+            && let Some(last_model) = contents.iter_mut().rev().find(|c| c.role.as_deref() == Some("model"))
+            && let Some(part) = last_model.parts.first_mut() {
+                part.thought_signature = Some(sig);
         }
 
         contents.push(GeminiContent {

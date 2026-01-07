@@ -223,7 +223,7 @@ impl NexusConfig {
     pub fn is_adhoc_mode(&self) -> bool {
         self.tasks
             .as_ref()
-            .map_or(false, |t| t.mode == "adhoc")
+            .is_some_and(|t| t.mode == "adhoc")
     }
 
     /// Get the full path to the adhoc planning directory
