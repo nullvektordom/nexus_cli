@@ -18,6 +18,8 @@ pub struct NexusConfig {
     pub brain: Option<BrainConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub llm: Option<LlmConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub catalyst: Option<CatalystConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,6 +31,7 @@ pub struct ProjectConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_field_names)] // _dir suffix is descriptive in this domain
 pub struct StructureConfig {
     pub planning_dir: String,
     pub management_dir: String,
@@ -44,7 +47,7 @@ pub struct GateConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObsidianConfig {
     /// Path to the directory containing planning documents (01-PLANNING/)
-    /// If not set, falls back to obsidian_path from [project]
+    /// If not set, falls back to `obsidian_path` from [project]
     pub planning_path: PathBuf,
 }
 
@@ -59,7 +62,7 @@ pub struct StateConfig {
 pub struct ActiveSprintConfig {
     /// Current sprint identifier (e.g., "sprint-4")
     pub current: String,
-    /// Sprint status: "in_progress" or "approved"
+    /// Sprint status: "`in_progress`" or "approved"
     pub status: String,
 }
 
@@ -70,7 +73,7 @@ pub struct TemplatesConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrainConfig {
-    /// Qdrant gRPC URL (e.g., "http://100.64.0.1:6334" for Tailscale)
+    /// Qdrant gRPC URL (e.g., "<http://100.64.0.1:6334>" for Tailscale)
     pub qdrant_url: String,
     /// Whether the brain is enabled
     #[serde(default = "default_brain_enabled")]
@@ -109,8 +112,30 @@ fn default_llm_enabled() -> bool {
     false
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalystConfig {
+    /// Whether catalyst document generation is enabled
+    #[serde(default = "default_catalyst_enabled")]
+    pub enabled: bool,
+    /// Whether to show reasoning process from models like `DeepSeek` R1
+    #[serde(default)]
+    pub show_reasoning: bool,
+    /// Maximum number of retry attempts if validation fails
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
+}
+
+fn default_catalyst_enabled() -> bool {
+    true
+}
+
+fn default_max_retries() -> u32 {
+    3
+}
+
 impl NexusConfig {
-    /// Create a new NexusConfig with the given project name and obsidian path
+    /// Create a new `NexusConfig` with the given project name and obsidian path
+    #[allow(clippy::needless_pass_by_value)] // Builder pattern, obsidian_path is cloned
     pub fn new(project_name: String, obsidian_path: String) -> Self {
         Self {
             project: ProjectConfig {
@@ -138,20 +163,19 @@ impl NexusConfig {
             templates: Some(TemplatesConfig {
                 claude_template: "templates/CLAUDE.md.example".to_string(),
             }),
-            brain: None, // Brain is disabled by default, configure in nexus.toml
-            llm: None,   // LLM is disabled by default, configure in nexus.toml
+            brain: None,    // Brain is disabled by default, configure in nexus.toml
+            llm: None,      // LLM is disabled by default, configure in nexus.toml
+            catalyst: None, // Catalyst uses defaults if not configured
         }
     }
 
-    /// Get the planning path, falling back to obsidian_path if not set
+    /// Get the planning path, falling back to `obsidian_path` if not set
     pub fn get_planning_path(&self) -> PathBuf {
         self.obsidian
-            .as_ref()
-            .map(|o| o.planning_path.clone())
-            .unwrap_or_else(|| PathBuf::from(&self.project.obsidian_path))
+            .as_ref().map_or_else(|| PathBuf::from(&self.project.obsidian_path), |o| o.planning_path.clone())
     }
 
-    /// Get the vault/repo path (obsidian_path)
+    /// Get the vault/repo path (`obsidian_path`)
     pub fn get_repo_path(&self) -> PathBuf {
         PathBuf::from(&self.project.obsidian_path)
     }

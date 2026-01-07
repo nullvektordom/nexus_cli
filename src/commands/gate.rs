@@ -3,6 +3,9 @@
 //! Validates planning documents and dashboard checkboxes before allowing project unlock.
 //! Provides ADHD-friendly terminal output with context snippets and line numbers.
 
+#![allow(clippy::too_many_lines)] // Complex validation logic requires detailed checks
+#![allow(clippy::if_not_else)] // Validation logic is clearer with existence checks first
+
 use crate::config::NexusConfig;
 use crate::heuristics::load_heuristics;
 use crate::planning::{
@@ -86,8 +89,7 @@ pub fn execute(project_path: &Path) -> Result<()> {
     let is_unlocked = config
         .state
         .as_ref()
-        .map(|s| s.is_unlocked)
-        .unwrap_or(false);
+        .is_some_and(|s| s.is_unlocked);
     let phase_label = if is_unlocked {
         "PHASE 2: ACTIVE SPRINT"
     } else {
@@ -142,18 +144,7 @@ fn validate_planning_phase(
         .join("00-START-HERE.md");
 
     // DEFENSIVE: Check if dashboard exists
-    if !dashboard_path.exists() {
-        all_passed = false;
-        println!(
-            "  {} Dashboard file not found: {}",
-            "✗".red().bold(),
-            dashboard_path.display()
-        );
-        println!(
-            "     Expected file: 00-START-HERE.md in {}",
-            config.structure.management_dir
-        );
-    } else {
+    if dashboard_path.exists() {
         // DEFENSIVE: Check dashboard file permissions
         match dashboard_path.metadata() {
             Ok(_) => match validate_dashboard_checkboxes(&dashboard_path) {
@@ -194,6 +185,17 @@ fn validate_planning_phase(
                 println!("  {} Cannot access dashboard: {}", "✗".red().bold(), e);
             }
         }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Dashboard file not found: {}",
+            "✗".red().bold(),
+            dashboard_path.display()
+        );
+        println!(
+            "     Expected file: 00-START-HERE.md in {}",
+            config.structure.management_dir
+        );
     }
 
     println!();
@@ -202,14 +204,7 @@ fn validate_planning_phase(
     println!("{}", "📝 SCANNING PLANNING DOCUMENTS...".bold());
     let planning_dir = vault_path.join(&config.structure.planning_dir);
 
-    if !planning_dir.exists() {
-        all_passed = false;
-        println!(
-            "  {} Planning directory not found: {}",
-            "✗".red().bold(),
-            planning_dir.display()
-        );
-    } else {
+    if planning_dir.exists() {
         // Use heuristics for validation parameters
         let min_word_count = heuristics.min_section_length as usize;
         let illegal_strings: Vec<String> = heuristics.illegal_strings.clone();
@@ -332,7 +327,7 @@ fn validate_planning_phase(
                         planning_dir.display()
                     )
                 })?
-                .filter_map(|entry| entry.ok())
+                .filter_map(std::result::Result::ok)
                 .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("md"))
                 .collect::<Vec<_>>();
 
@@ -347,17 +342,14 @@ fn validate_planning_phase(
                 // Use generic validation with all required headers from heuristics
                 for entry in planning_files {
                     let file_path = entry.path();
-                    let file_name = match file_path.file_name() {
-                        Some(name) => name.to_string_lossy().to_string(),
-                        None => {
-                            all_passed = false;
-                            println!(
-                                "  {} Skipping file with invalid path: {}",
-                                "⚠".yellow().bold(),
-                                file_path.display()
-                            );
-                            continue;
-                        }
+                    let file_name = if let Some(name) = file_path.file_name() { name.to_string_lossy().to_string() } else {
+                        all_passed = false;
+                        println!(
+                            "  {} Skipping file with invalid path: {}",
+                            "⚠".yellow().bold(),
+                            file_path.display()
+                        );
+                        continue;
                     };
 
                     // DEFENSIVE: Check for symlink loops before reading
@@ -422,6 +414,13 @@ fn validate_planning_phase(
                 }
             }
         }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Planning directory not found: {}",
+            "✗".red().bold(),
+            planning_dir.display()
+        );
     }
 
     Ok(all_passed)
@@ -461,13 +460,7 @@ fn validate_active_sprint(vault_path: &Path, config: &NexusConfig) -> Result<boo
 
     // Validate Tasks.md (must have zero unchecked boxes)
     let tasks_path = sprint_folder.join("Tasks.md");
-    if !tasks_path.exists() {
-        all_passed = false;
-        println!(
-            "  {} Tasks.md not found in sprint folder",
-            "✗".red().bold()
-        );
-    } else {
+    if tasks_path.exists() {
         match validate_dashboard_checkboxes(&tasks_path) {
             Ok(result) => {
                 if result.passed {
@@ -493,17 +486,17 @@ fn validate_active_sprint(vault_path: &Path, config: &NexusConfig) -> Result<boo
                 );
             }
         }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Tasks.md not found in sprint folder",
+            "✗".red().bold()
+        );
     }
 
     // Validate Sprint-Context.md (must exist and contain content)
     let context_path = sprint_folder.join("Sprint-Context.md");
-    if !context_path.exists() {
-        all_passed = false;
-        println!(
-            "  {} Sprint-Context.md not found in sprint folder",
-            "✗".red().bold()
-        );
-    } else {
+    if context_path.exists() {
         match std::fs::read_to_string(&context_path) {
             Ok(content) => {
                 let trimmed = content.trim();
@@ -530,6 +523,12 @@ fn validate_active_sprint(vault_path: &Path, config: &NexusConfig) -> Result<boo
                 );
             }
         }
+    } else {
+        all_passed = false;
+        println!(
+            "  {} Sprint-Context.md not found in sprint folder",
+            "✗".red().bold()
+        );
     }
 
     Ok(all_passed)

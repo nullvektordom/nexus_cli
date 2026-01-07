@@ -75,7 +75,8 @@ src/catalyst/
 ├── engine.rs               # CatalystEngine - orchestration
 ├── generator.rs            # DocumentGenerator - per-doc logic
 ├── prompts.rs              # Prompt templates for each document
-├── sequential_thinking.rs  # MCP integration wrapper
+├── thinking.rs             # Sequential thinking MCP (remote SSE)
+├── filesystem_mcp.rs       # Filesystem MCP (local stdio)
 └── validation.rs           # Pre/post validation
 ```
 
@@ -231,8 +232,8 @@ Your response MUST match this markdown structure exactly:
 Begin your reasoning, then provide the final document.
 ```
 
-#### 4. Sequential Thinking Integration ([`src/catalyst/sequential_thinking.rs`](src/catalyst/sequential_thinking.rs))
-**Purpose**: Wrapper for the `sequentialthinking` MCP server integration.
+#### 4. Sequential Thinking Integration ([`src/catalyst/thinking.rs`](src/catalyst/thinking.rs))
+**Purpose**: Wrapper for the remote `sequentialthinking` MCP server (SSE-based).
 
 **Key Methods**:
 ```rust
@@ -249,18 +250,68 @@ pub struct ThoughtStep {
     revises_thought: Option<u32>,
 }
 
-/// Execute a thinking session for document generation
-pub async fn generate_with_thinking(
-    prompt: &str,
-    llm_client: &LlmClient,
-) -> Result<(String, ThinkingSession)>;
+pub struct ThinkingClient {
+    server_url: String,
+    http_client: reqwest::Client,
+}
+
+impl ThinkingClient {
+    /// Connect to remote MCP server via SSE
+    pub fn new() -> Result<Self>;
+    
+    /// Execute a thinking session for document generation
+    pub async fn generate_with_thinking(
+        &self,
+        prompt: &str,
+        llm_client: &LlmClient,
+    ) -> Result<(String, ThinkingSession)>;
+}
 ```
 
 **Integration Strategy**:
-- Use MCP `mcp--sequentialthinking--sequentialthinking` tool
+- Connect to self-hosted MCP server via HTTP SSE
+- Read URL from `SEQUENTIAL_THINKING_URL` environment variable
 - Let DeepSeek R1 reason through document structure
 - Capture thinking steps for debugging/transparency
 - Extract final answer from thinking session
+- Fall back to direct LLM generation if server unavailable
+
+#### 5. Filesystem MCP Integration ([`src/catalyst/filesystem_mcp.rs`](src/catalyst/filesystem_mcp.rs))
+**Purpose**: Local MCP server for controlled filesystem access via stdio.
+
+**Key Methods**:
+```rust
+pub struct FilesystemMcpServer {
+    process: Child,
+    allowed_paths: Vec<String>,
+}
+
+impl FilesystemMcpServer {
+    /// Spawn local MCP server as child process
+    pub fn spawn() -> Result<Self>;
+    
+    /// Read file via MCP server
+    pub fn read_file(&mut self, path: &str) -> Result<String>;
+    
+    /// List directory via MCP server
+    pub fn list_directory(&mut self, path: &str) -> Result<Vec<String>>;
+}
+
+impl Drop for FilesystemMcpServer {
+    fn drop(&mut self) {
+        // Cleanup child process
+    }
+}
+```
+
+**Integration Strategy**:
+- Spawn `@modelcontextprotocol/server-filesystem` via npx
+- Configure allowed paths from `FILESYSTEM_PATHS` environment variable
+- Use stdio (JSON-RPC) communication protocol
+- LLM accesses filesystem via MCP tools (read_file, list_directory)
+- Enforces path restrictions for security
+- Process lifecycle managed by engine (auto-cleanup on drop)
+- Fall back to direct filesystem access if spawn fails
 
 #### 5. Validation Layer ([`src/catalyst/validation.rs`](src/catalyst/validation.rs))
 **Purpose**: Ensure generated documents meet gate heuristics before saving.
@@ -388,31 +439,66 @@ fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
 
 ### Integration with MCP
 
-Use the existing `sequentialthinking` MCP server:
+**Infrastructure Setup**:
+- MCP server is **self-hosted** on a remote machine (accessible via Tailscale network)
+- Communication via **HTTP Server-Sent Events (SSE)**, not stdio
+- Server URL: `http://100.105.8.97:8000/sse`
+- Configuration via environment variable: `SEQUENTIAL_THINKING_URL=http://100.105.8.97:8000/sse`
+- Environment variable stored in local `.env` file
 
+**Connection Strategy**:
 ```rust
-// Example thinking session for scope generation
-let thinking_request = ThinkingRequest {
-    thought: "Let me analyze the problem statement to identify core features",
-    next_thought_needed: true,
-    thought_number: 1,
-    total_thoughts: 10, // Initial estimate
-    is_revision: false,
-    revises_thought: None,
-    branch_from_thought: None,
-    branch_id: None,
-    needs_more_thoughts: false,
-};
+use reqwest::Client;
+use std::env;
 
-// Iteratively build thoughts until conclusion
-while thinking_session.next_thought_needed {
-    let response = mcp_client.call("sequentialthinking", thinking_request).await?;
-    thinking_session.add_thought(response);
+// Load URL from environment or use default
+let server_url = env::var("SEQUENTIAL_THINKING_URL")
+    .unwrap_or_else(|_| "http://100.105.8.97:8000/sse".to_string());
+
+// Create HTTP client for SSE communication
+let client = Client::new();
+
+// Health check before use
+let is_available = client.get(&format!("{}/health", server_url))
+    .send()
+    .await
+    .is_ok();
+
+if !is_available {
+    // Fall back to direct LLM generation
+    warn!("Sequential thinking server unavailable, using direct generation");
+}
+```
+
+**Example thinking session for scope generation**:
+```rust
+// Connect to SSE endpoint
+let thinking_client = ThinkingClient::new()?; // Reads SEQUENTIAL_THINKING_URL from env
+
+// Check server availability
+if !thinking_client.health_check().await? {
+    // Graceful fallback to direct generation
+    return generate_without_thinking(prompt).await;
 }
 
-// Extract final answer
-let generated_document = thinking_session.get_final_answer();
+// Stream thinking steps via SSE
+let (final_document, thinking_session) = thinking_client
+    .generate_with_thinking(prompt, llm_client)
+    .await?;
+
+// thinking_session contains captured reasoning steps
+for step in thinking_session.thoughts {
+    debug!("Thought {}: {}", step.thought_number, step.content);
+}
+
+// Use final_document as generated planning document
 ```
+
+**Fallback Behavior**:
+- If MCP server is unreachable: Use direct LLM generation (no thinking)
+- If connection times out: Warn user and fall back
+- If SSE stream breaks: Retry once, then fall back
+- All fallbacks are transparent to user with informative messages
 
 ### Prompt Engineering for Thinking
 

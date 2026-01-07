@@ -88,13 +88,13 @@ impl LlmClient {
             }
             LlmProvider::Gemini => {
                 // Gemini doesn't have system messages, so prepend to user message
-                let combined = format!("{}\n\n{}", system_prompt, user_prompt);
+                let combined = format!("{system_prompt}\n\n{user_prompt}");
                 self.complete_gemini(&combined).await
             }
         }
     }
 
-    /// Send a prompt with system message to OpenRouter API
+    /// Send a prompt with system message to `OpenRouter` API
     async fn complete_openrouter_with_system(
         &self,
         system_prompt: &str,
@@ -161,7 +161,7 @@ impl LlmClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            anyhow::bail!("OpenRouter API error ({}): {}", status, error_text);
+            anyhow::bail!("OpenRouter API error ({status}): {error_text}");
         }
 
         let openrouter_response: OpenRouterResponse = response
@@ -176,7 +176,7 @@ impl LlmClient {
             .ok_or_else(|| anyhow::anyhow!("No content in OpenRouter response"))
     }
 
-    /// Send a prompt to OpenRouter API (OpenAI-compatible format)
+    /// Send a prompt to `OpenRouter` API (OpenAI-compatible format)
     async fn complete_openrouter(&self, prompt: &str) -> Result<String> {
         #[derive(Serialize)]
         struct OpenRouterRequest {
@@ -233,7 +233,7 @@ impl LlmClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            anyhow::bail!("OpenRouter API error ({}): {}", status, error_text);
+            anyhow::bail!("OpenRouter API error ({status}): {error_text}");
         }
 
         let openrouter_response: OpenRouterResponse = response
@@ -305,7 +305,7 @@ impl LlmClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            anyhow::bail!("Claude API error ({}): {}", status, error_text);
+            anyhow::bail!("Claude API error ({status}): {error_text}");
         }
 
         let claude_response: ClaudeResponse = response
@@ -371,7 +371,7 @@ impl LlmClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            anyhow::bail!("Claude API error ({}): {}", status, error_text);
+            anyhow::bail!("Claude API error ({status}): {error_text}");
         }
 
         let claude_response: ClaudeResponse = response
@@ -451,7 +451,7 @@ impl LlmClient {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            anyhow::bail!("Gemini API error ({}): {}", status, error_text);
+            anyhow::bail!("Gemini API error ({status}): {error_text}");
         }
 
         let gemini_response: GeminiResponse = response

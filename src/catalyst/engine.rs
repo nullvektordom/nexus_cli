@@ -1,4 +1,6 @@
-/// Core catalyst engine for document generation
+//! Core catalyst engine for document generation
+
+#![allow(clippy::similar_names)] // context/content are domain-appropriate names
 
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -79,9 +81,107 @@ impl GenerationReport {
     }
 }
 
+/// Status of document generation
+#[derive(Debug, Clone)]
+pub struct GenerationStatus {
+    pub complete: Vec<DocumentType>,
+    pub needs_refinement: Vec<DocumentType>,
+    pub drafts: Vec<DocumentType>,
+    pub missing: Vec<DocumentType>,
+}
+
+impl GenerationStatus {
+    pub fn new() -> Self {
+        Self {
+            complete: Vec::new(),
+            needs_refinement: Vec::new(),
+            drafts: Vec::new(),
+            missing: Vec::new(),
+        }
+    }
+
+    pub fn mark_complete(&mut self, doc_type: DocumentType) {
+        self.complete.push(doc_type);
+    }
+
+    pub fn mark_needs_refinement(&mut self, doc_type: DocumentType) {
+        self.needs_refinement.push(doc_type);
+    }
+
+    pub fn mark_draft(&mut self, doc_type: DocumentType) {
+        self.drafts.push(doc_type);
+    }
+
+    pub fn mark_missing(&mut self, doc_type: DocumentType) {
+        self.missing.push(doc_type);
+    }
+
+    pub fn print_summary(&self) {
+        println!();
+        println!("{}", "═══════════════════════════════════════".cyan());
+        println!("{}", "  Catalyst Status".cyan().bold());
+        println!("{}", "═══════════════════════════════════════".cyan());
+        println!();
+
+        if !self.complete.is_empty() {
+            println!("{}", "✓ Complete (validated):".green().bold());
+            for doc in &self.complete {
+                println!("  • {}", doc.filename().green());
+            }
+            println!();
+        }
+
+        if !self.needs_refinement.is_empty() {
+            println!("{}", "⚠ Needs Refinement (validation failed):".yellow().bold());
+            for doc in &self.needs_refinement {
+                println!("  • {}", doc.filename().yellow());
+            }
+            println!();
+        }
+
+        if !self.drafts.is_empty() {
+            println!("{}", "📝 Drafts (not finalized):".blue().bold());
+            for doc in &self.drafts {
+                println!("  • {}.draft.md", doc.filename().trim_end_matches(".md").blue());
+            }
+            println!();
+        }
+
+        if !self.missing.is_empty() {
+            println!("{}", "✗ Not Generated:".red().bold());
+            for doc in &self.missing {
+                println!("  • {}", doc.filename().dimmed());
+            }
+            println!();
+        }
+
+        // Summary
+        let total = 4;
+        let generated = self.complete.len() + self.needs_refinement.len();
+        println!(
+            "{}",
+            format!("Progress: {}/{} documents complete", self.complete.len(), total).bold()
+        );
+        
+        if generated < total {
+            println!(
+                "{}",
+                "Run 'catalyst generate' to create missing documents".to_string().dimmed()
+            );
+        } else if !self.needs_refinement.is_empty() {
+            println!(
+                "{}",
+                "Run 'catalyst refine <doc> <feedback>' to improve documents".to_string().dimmed()
+            );
+        }
+        println!();
+    }
+}
+
 /// Main engine for generating planning documents
 pub struct CatalystEngine {
     /// Project identifier
+    #[allow(dead_code)] // Used for future multi-project support
     project_id: String,
     /// Path to Obsidian vault
     obsidian_path: PathBuf,
@@ -91,6 +191,7 @@ pub struct CatalystEngine {
 
 impl CatalystEngine {
     /// Create a new catalyst engine
+    #[allow(clippy::unnecessary_wraps)] // Consistent API, may add validation later
     pub fn new(project_id: String, obsidian_path: PathBuf, llm_client: LlmClient) -> Result<Self> {
         Ok(Self {
             project_id,
@@ -360,13 +461,13 @@ impl CatalystEngine {
         // Step 1: Generate scope
         println!("{}", "Step 1/4: Scope and Boundaries".bold());
         match self.generate_scope().await {
-            Ok(_) => {
+            Ok(()) => {
                 report.mark_success(DocumentType::Scope);
                 println!();
             }
             Err(e) => {
                 report.mark_failure(DocumentType::Scope, e.to_string());
-                println!("{}", format!("✗ Failed: {}", e).red());
+                println!("{}", format!("✗ Failed: {e}").red());
                 return Ok(report);
             }
         }
@@ -374,13 +475,13 @@ impl CatalystEngine {
         // Step 2: Generate tech stack
         println!("{}", "Step 2/4: Tech Stack".bold());
         match self.generate_tech_stack().await {
-            Ok(_) => {
+            Ok(()) => {
                 report.mark_success(DocumentType::TechStack);
                 println!();
             }
             Err(e) => {
                 report.mark_failure(DocumentType::TechStack, e.to_string());
-                println!("{}", format!("✗ Failed: {}", e).red());
+                println!("{}", format!("✗ Failed: {e}").red());
                 return Ok(report);
             }
         }
@@ -388,13 +489,13 @@ impl CatalystEngine {
         // Step 3: Generate architecture
         println!("{}", "Step 3/4: Architecture".bold());
         match self.generate_architecture().await {
-            Ok(_) => {
+            Ok(()) => {
                 report.mark_success(DocumentType::Architecture);
                 println!();
             }
             Err(e) => {
                 report.mark_failure(DocumentType::Architecture, e.to_string());
-                println!("{}", format!("✗ Failed: {}", e).red());
+                println!("{}", format!("✗ Failed: {e}").red());
                 return Ok(report);
             }
         }
@@ -402,18 +503,206 @@ impl CatalystEngine {
         // Step 4: Generate MVP breakdown
         println!("{}", "Step 4/4: MVP Breakdown".bold());
         match self.generate_mvp_breakdown().await {
-            Ok(_) => {
+            Ok(()) => {
                 report.mark_success(DocumentType::MvpBreakdown);
                 println!();
             }
             Err(e) => {
                 report.mark_failure(DocumentType::MvpBreakdown, e.to_string());
-                println!("{}", format!("✗ Failed: {}", e).red());
+                println!("{}", format!("✗ Failed: {e}").red());
                 return Ok(report);
             }
         }
 
         Ok(report)
+    }
+
+    /// Refine an existing document with user feedback
+    ///
+    /// # Arguments
+    /// * `doc_type` - The document type to refine
+    /// * `feedback` - User feedback describing desired changes
+    ///
+    /// # Returns
+    /// Ok(()) if refinement successful, Err otherwise
+    pub async fn refine_document(&self, doc_type: DocumentType, feedback: &str) -> Result<()> {
+        println!(
+            "{}",
+            format!("🔄 Refining {} with feedback...", doc_type.filename()).cyan()
+        );
+
+        // Load the existing document
+        let doc_path = self.obsidian_path.join(doc_type.filename());
+        
+        if !doc_path.exists() {
+            anyhow::bail!(
+                "Document not found: {}. Generate it first.",
+                doc_path.display()
+            );
+        }
+
+        let existing_content = fs::read_to_string(&doc_path)
+            .context("Failed to read existing document")?;
+
+        // Build context based on document type
+        let context = self.build_context_for_document(doc_type)?;
+
+        // Create refinement prompt
+        let base_prompt = match doc_type {
+            DocumentType::Scope => PromptTemplate::for_scope(&context),
+            DocumentType::TechStack => PromptTemplate::for_tech_stack(&context),
+            DocumentType::Architecture => PromptTemplate::for_architecture(&context),
+            DocumentType::MvpBreakdown => PromptTemplate::for_mvp_breakdown(&context),
+        };
+
+        // Add refinement context
+        let refinement_prompt = format!(
+            r"{}
+
+REFINEMENT CONTEXT:
+You previously generated this document:
+
+---
+{}
+---
+
+USER FEEDBACK:
+{}
+
+Please regenerate the document incorporating the user's feedback while maintaining the required structure and format.",
+            base_prompt.user_prompt(),
+            existing_content,
+            feedback
+        );
+
+        println!("{}", "  Calling LLM for refinement...".dimmed());
+
+        // Call LLM with refinement prompt
+        let response = self
+            .llm_client
+            .complete_with_system(base_prompt.system_prompt(), &refinement_prompt)
+            .await
+            .context("Failed to refine document via LLM")?;
+
+        // Extract reasoning and final answer
+        let (reasoning, final_answer) = extract_reasoning_and_answer(&response);
+
+        // Show reasoning if enabled
+        if let Some(ref reasoning_text) = reasoning
+            && std::env::var("CATALYST_SHOW_REASONING").is_ok() {
+                println!();
+                println!("{}", "═══ Refinement Reasoning ═══".dimmed());
+                println!("{}", reasoning_text.dimmed());
+                println!("{}", "═══ End Reasoning ═══".dimmed());
+                println!();
+            }
+
+        // Clean response
+        let cleaned = clean_llm_response(&final_answer);
+
+        // Validate refined document
+        println!("{}", "✓ Document refined, validating...".green());
+
+        fs::write(&doc_path, &cleaned)
+            .context("Failed to write refined document")?;
+
+        let is_valid = validate_generated_document(doc_type, &cleaned, &doc_path)?;
+
+        if !is_valid {
+            println!(
+                "{}",
+                "⚠ Refined document failed validation. Saving as draft...".yellow()
+            );
+            let draft_path = self
+                .obsidian_path
+                .join(format!("{}.draft.md", doc_type.filename().trim_end_matches(".md")));
+            fs::write(&draft_path, &cleaned)
+                .context("Failed to write draft")?;
+            
+            // Restore original document
+            fs::write(&doc_path, &existing_content)
+                .context("Failed to restore original document")?;
+            
+            anyhow::bail!(
+                "Refined document failed validation. Original restored. Review draft at: {}",
+                draft_path.display()
+            );
+        }
+
+        println!(
+            "{}",
+            format!("✓ Document refined successfully: {}", doc_path.display()).green()
+        );
+
+        Ok(())
+    }
+
+    /// Get generation status for all documents
+    pub fn status(&self) -> GenerationStatus {
+        let mut status = GenerationStatus::new();
+
+        // Check each document
+        for doc_type in &[
+            DocumentType::Scope,
+            DocumentType::TechStack,
+            DocumentType::Architecture,
+            DocumentType::MvpBreakdown,
+        ] {
+            let doc_path = self.obsidian_path.join(doc_type.filename());
+            let draft_path = self
+                .obsidian_path
+                .join(format!("{}.draft.md", doc_type.filename().trim_end_matches(".md")));
+
+            if doc_path.exists() {
+                // Check if it passes validation
+                if let Ok(content) = fs::read_to_string(&doc_path) {
+                    match validate_generated_document(*doc_type, &content, &doc_path) {
+                        Ok(true) => status.mark_complete(*doc_type),
+                        Ok(false) => status.mark_needs_refinement(*doc_type),
+                        Err(_) => status.mark_needs_refinement(*doc_type),
+                    }
+                }
+            } else if draft_path.exists() {
+                status.mark_draft(*doc_type);
+            } else {
+                status.mark_missing(*doc_type);
+            }
+        }
+
+        status
+    }
+
+    /// Build generation context for a specific document type
+    fn build_context_for_document(&self, doc_type: DocumentType) -> Result<GenerationContext> {
+        let vision = self.load_vision_document()?;
+        let mut context = GenerationContext::new(vision);
+
+        // Add context based on document type
+        match doc_type {
+            DocumentType::Scope => {
+                // Scope only needs vision
+            }
+            DocumentType::TechStack => {
+                let scope = self.load_scope_document()?;
+                context = context.with_scope(scope);
+            }
+            DocumentType::Architecture => {
+                let scope = self.load_scope_document()?;
+                let tech_stack = self.load_tech_stack_document()?;
+                context = context.with_scope(scope).with_tech_stack(tech_stack);
+            }
+            DocumentType::MvpBreakdown => {
+                let scope = self.load_scope_document()?;
+                let tech_stack = self.load_tech_stack_document()?;
+                let architecture = self.load_architecture_document()?;
+                context = context
+                    .with_scope(scope)
+                    .with_tech_stack(tech_stack)
+                    .with_architecture(architecture);
+            }
+        }
+
+        Ok(context)
     }
 
     /// Load and parse the vision document
@@ -503,14 +792,30 @@ impl CatalystEngine {
             .await
             .context("Failed to generate document via LLM")?;
 
-        // Clean up response (remove any markdown code fences if present)
-        let cleaned = clean_llm_response(&response);
+        // Extract reasoning and final answer if present
+        let (reasoning, final_answer) = extract_reasoning_and_answer(&response);
+
+        // Show reasoning if configured (for debugging/transparency)
+        if let Some(ref reasoning_text) = reasoning {
+            // Check if show_reasoning is enabled (we'll add this config check later)
+            if std::env::var("CATALYST_SHOW_REASONING").is_ok() {
+                println!();
+                println!("{}", "═══ Model Reasoning ═══".dimmed());
+                println!("{}", reasoning_text.dimmed());
+                println!("{}", "═══ End Reasoning ═══".dimmed());
+                println!();
+            }
+        }
+
+        // Clean up final answer (remove any markdown code fences if present)
+        let cleaned = clean_llm_response(&final_answer);
 
         Ok(cleaned)
     }
 }
 
 /// Parse vision document into structured data
+#[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
 fn parse_vision_document(content: &str) -> Result<VisionData> {
     let sections = extract_sections(content);
 
@@ -535,6 +840,7 @@ fn parse_vision_document(content: &str) -> Result<VisionData> {
 }
 
 /// Parse scope document into structured data
+#[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
 fn parse_scope_document(content: &str) -> Result<crate::catalyst::generator::ScopeData> {
     let sections = extract_sections(content);
 
@@ -601,7 +907,7 @@ fn extract_sections(content: &str) -> HashMap<String, String> {
             }
             Event::Code(code) => {
                 if !in_header && current_header.is_some() {
-                    current_content.push(format!("`{}`", code));
+                    current_content.push(format!("`{code}`"));
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
@@ -634,7 +940,7 @@ fn extract_list_items(text: &str) -> Vec<String> {
                         .trim()
                         .to_string(),
                 )
-            } else if trimmed.chars().next().map_or(false, |c| c.is_numeric()) {
+            } else if trimmed.chars().next().is_some_and(char::is_numeric) {
                 // Handle numbered lists (e.g., "1. Item")
                 trimmed
                     .split_once('.')
@@ -668,7 +974,41 @@ fn clean_llm_response(response: &str) -> String {
     cleaned.trim().to_string()
 }
 
+/// Extract reasoning and final answer from LLM response
+///
+/// Reasoning models like `DeepSeek` R1 often wrap their thinking in <think> tags.
+/// This function separates the reasoning from the final answer.
+///
+/// Returns: (Option<reasoning>, `final_answer`)
+fn extract_reasoning_and_answer(response: &str) -> (Option<String>, String) {
+    // Check if response contains <think> tags
+    if response.contains("<think>") && response.contains("</think>") {
+        // Extract reasoning between <think> and </think>
+        let reasoning_start = response.find("<think>").map(|i| i + 7); // 7 = len("<think>")
+        let reasoning_end = response.find("</think>");
+
+        if let (Some(start), Some(end)) = (reasoning_start, reasoning_end)
+            && start < end {
+                let reasoning = response[start..end].trim().to_string();
+                
+                // Extract everything after </think> as the final answer
+                let answer_start = end + 8; // 8 = len("</think>")
+                let final_answer = if answer_start < response.len() {
+                    response[answer_start..].trim().to_string()
+                } else {
+                    response.trim().to_string()
+                };
+
+                return (Some(reasoning), final_answer);
+            }
+    }
+
+    // No reasoning tags found, return entire response as final answer
+    (None, response.to_string())
+}
+
 /// Parse tech stack document into structured data
+#[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
 fn parse_tech_stack_document(content: &str) -> Result<crate::catalyst::generator::TechStackData> {
     let sections = extract_sections(content);
 
@@ -690,6 +1030,7 @@ fn parse_tech_stack_document(content: &str) -> Result<crate::catalyst::generator
 }
 
 /// Parse architecture document into structured data
+#[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
 fn parse_architecture_document(
     content: &str,
 ) -> Result<crate::catalyst::generator::ArchitectureData> {
@@ -717,7 +1058,7 @@ mod tests {
 
     #[test]
     fn test_parse_vision_document() {
-        let content = r#"
+        let content = r"
 # My problem (personal):
 
 I need to manage my projects better.
@@ -733,7 +1074,7 @@ Successfully plan 5 projects.
 ## Anti-vision (what this project is NOT):
 
 Not a full project management suite.
-"#;
+";
 
         let vision = parse_vision_document(content).unwrap();
         assert!(vision.problem.contains("manage my projects"));
@@ -744,13 +1085,13 @@ Not a full project management suite.
 
     #[test]
     fn test_extract_list_items() {
-        let text = r#"
+        let text = r"
 - Feature one
 - Feature two
 * Feature three
 1. Feature four
 2. Feature five
-"#;
+";
 
         let items = extract_list_items(text);
         assert_eq!(items.len(), 5);

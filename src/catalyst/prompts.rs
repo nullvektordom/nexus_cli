@@ -1,4 +1,4 @@
-/// Prompt templates for document generation
+//! Prompt templates for document generation
 
 use crate::catalyst::generator::GenerationContext;
 
@@ -15,7 +15,13 @@ impl PromptTemplate {
 
 Your task is to generate a "Scope and Boundaries" document based on the user's vision.
 
-CRITICAL REQUIREMENTS:
+REASONING INSTRUCTIONS:
+If you are a reasoning model (like DeepSeek R1), think through the problem step-by-step first, then provide your final answer.
+Structure your response as:
+1. <think> tags with your reasoning process (optional, will be extracted if present)
+2. Final markdown document (required)
+
+CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
 2. Use EXACTLY these section headers (with ## prefix):
    - ## MVP (Minimum Viable Product):
@@ -27,16 +33,17 @@ CRITICAL REQUIREMENTS:
 5. Focus on what makes the MVP truly minimal while still being viable
 6. Be ruthless about what goes in "Never" - this prevents scope creep
 
+REASONING GUIDANCE:
 Think step-by-step about:
 - What is the absolute minimum needed to validate the core value proposition?
 - What features would be nice but aren't essential for the first version?
 - What features might seem related but would dilute focus?
 - What technical constraints exist (time, budget, skills, platform)?
 
-Output the complete markdown document with all sections filled out."#.to_string();
+After reasoning, output the complete markdown document with all sections filled out."#.to_string();
 
         let user_prompt = format!(
-            r#"Based on this vision, generate a comprehensive Scope and Boundaries document:
+            r"Based on this vision, generate a comprehensive Scope and Boundaries document:
 
 # Vision
 
@@ -55,7 +62,7 @@ Generate the Scope and Boundaries document now. Remember:
 - Be specific and concrete
 - No placeholders or TODOs
 - Minimum 50 words per section
-- Focus on making the MVP truly minimal"#,
+- Focus on making the MVP truly minimal",
             context.vision.problem,
             context.vision.solution,
             context.vision.success_criteria,
@@ -72,7 +79,7 @@ Generate the Scope and Boundaries document now. Remember:
     pub fn for_tech_stack(context: &GenerationContext) -> Self {
         let scope_context = if let Some(scope) = &context.scope {
             format!(
-                r#"
+                r"
 # Scope Context
 
 **MVP Features**:
@@ -85,23 +92,23 @@ Generate the Scope and Boundaries document now. Remember:
 {}
 
 **Constraints**:
-{}"#,
+{}",
                 scope
                     .mvp_features
                     .iter()
-                    .map(|f| format!("- {}", f))
+                    .map(|f| format!("- {f}"))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 scope
                     .version2_features
                     .iter()
-                    .map(|f| format!("- {}", f))
+                    .map(|f| format!("- {f}"))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 scope
                     .never_features
                     .iter()
-                    .map(|f| format!("- {}", f))
+                    .map(|f| format!("- {f}"))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 scope.constraints
@@ -114,7 +121,13 @@ Generate the Scope and Boundaries document now. Remember:
 
 Your task is to generate a "Tech Stack" document based on the vision and scope.
 
-CRITICAL REQUIREMENTS:
+REASONING INSTRUCTIONS:
+If you are a reasoning model, think through the problem step-by-step first, then provide your final answer.
+Structure your response as:
+1. <think> tags with your reasoning process (optional, will be extracted if present)
+2. Final markdown document (required)
+
+CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
 2. Use EXACTLY these section headers (with ## prefix):
    - ## Language:
@@ -126,16 +139,17 @@ CRITICAL REQUIREMENTS:
 5. NO placeholders like TODO, TBD, [fill], [describe]
 6. Justify choices based on MVP requirements and constraints
 
+REASONING GUIDANCE:
 Think step-by-step about:
 - What language best fits the developer's skills and project needs?
 - What framework minimizes boilerplate while staying flexible?
 - Does the MVP actually need a database, or can it start simpler?
 - How do these choices support rapid iteration?
 
-Output the complete markdown document with all sections filled out."#.to_string();
+After reasoning, output the complete markdown document with all sections filled out."#.to_string();
 
         let user_prompt = format!(
-            r#"Based on this vision and scope, generate a comprehensive Tech Stack document:
+            r"Based on this vision and scope, generate a comprehensive Tech Stack document:
 
 # Vision
 
@@ -152,7 +166,7 @@ Generate the Tech Stack document now. Remember:
 - Use the exact section headers specified
 - Name specific technologies
 - No placeholders or TODOs
-- Justify based on MVP needs and constraints"#,
+- Justify based on MVP needs and constraints",
             context.vision.problem,
             context.vision.solution,
             context.vision.success_criteria,
@@ -174,18 +188,18 @@ Generate the Tech Stack document now. Remember:
     pub fn for_architecture(context: &GenerationContext) -> Self {
         let scope_context = if let Some(scope) = &context.scope {
             format!(
-                r#"
+                r"
 # Scope Context
 
 **MVP Features**:
 {}
 
 **Constraints**:
-{}"#,
+{}",
                 scope
                     .mvp_features
                     .iter()
-                    .map(|f| format!("- {}", f))
+                    .map(|f| format!("- {f}"))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 scope.constraints
@@ -196,13 +210,13 @@ Generate the Tech Stack document now. Remember:
 
         let tech_context = if let Some(tech) = &context.tech_stack {
             format!(
-                r#"
+                r"
 # Tech Stack Context
 
 **Language**: {}
 **Framework**: {}
 **Database**: {}
-**Justification**: {}"#,
+**Justification**: {}",
                 tech.language,
                 tech.framework,
                 tech.database.as_deref().unwrap_or("None"),
@@ -216,7 +230,13 @@ Generate the Tech Stack document now. Remember:
 
 Your task is to generate an "Architecture" document based on the vision, scope, and tech stack.
 
-CRITICAL REQUIREMENTS:
+REASONING INSTRUCTIONS:
+If you are a reasoning model, think through the problem step-by-step first, then provide your final answer.
+Structure your response as:
+1. <think> tags with your reasoning process (optional, will be extracted if present)
+2. Final markdown document (required)
+
+CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
 2. Use EXACTLY these section headers (with ## prefix):
    - ## Folder structure:
@@ -229,16 +249,17 @@ CRITICAL REQUIREMENTS:
 6. Data model should list actual entities with fields
 7. User flow should be step-by-step
 
+REASONING GUIDANCE:
 Think step-by-step about:
 - What folder structure best fits the chosen tech stack?
 - What are the core data entities needed for the MVP?
 - What is the primary user journey through the system?
 - What critical technical decisions need to be made upfront?
 
-Output the complete markdown document with all sections filled out."#.to_string();
+After reasoning, output the complete markdown document with all sections filled out."#.to_string();
 
         let user_prompt = format!(
-            r#"Based on this vision, scope, and tech stack, generate a comprehensive Architecture document:
+            r"Based on this vision, scope, and tech stack, generate a comprehensive Architecture document:
 
 # Vision
 
@@ -258,7 +279,7 @@ Generate the Architecture document now. Remember:
 - No placeholders or TODOs
 - Folder structure in code block
 - List actual entities and fields
-- Step-by-step user flow"#,
+- Step-by-step user flow",
             context.vision.problem,
             context.vision.solution,
             context.vision.success_criteria,
@@ -276,15 +297,15 @@ Generate the Architecture document now. Remember:
     pub fn for_mvp_breakdown(context: &GenerationContext) -> Self {
         let scope_context = if let Some(scope) = &context.scope {
             format!(
-                r#"
+                r"
 # Scope Context
 
 **MVP Features**:
-{}"#,
+{}",
                 scope
                     .mvp_features
                     .iter()
-                    .map(|f| format!("- {}", f))
+                    .map(|f| format!("- {f}"))
                     .collect::<Vec<_>>()
                     .join("\n")
             )
@@ -294,11 +315,11 @@ Generate the Architecture document now. Remember:
 
         let tech_context = if let Some(tech) = &context.tech_stack {
             format!(
-                r#"
+                r"
 # Tech Stack
 
 **Language**: {}
-**Framework**: {}"#,
+**Framework**: {}",
                 tech.language, tech.framework
             )
         } else {
@@ -307,14 +328,14 @@ Generate the Architecture document now. Remember:
 
         let arch_context = if let Some(arch) = &context.architecture {
             format!(
-                r#"
+                r"
 # Architecture
 
 **Folder Structure**:
 {}
 
 **Data Model**:
-{}"#,
+{}",
                 arch.folder_structure, arch.data_model
             )
         } else {
@@ -325,7 +346,13 @@ Generate the Architecture document now. Remember:
 
 Your task is to generate an "MVP Breakdown" document that divides the project into 3-5 sprints.
 
-CRITICAL REQUIREMENTS:
+REASONING INSTRUCTIONS:
+If you are a reasoning model, think through the problem step-by-step first, then provide your final answer.
+Structure your response as:
+1. <think> tags with your reasoning process (optional, will be extracted if present)
+2. Final markdown document (required)
+
+CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
 2. Create 3-5 sprint sections with headers like: ## Sprint 0: Setup (day 1)
 3. Each sprint must have:
@@ -337,13 +364,14 @@ CRITICAL REQUIREMENTS:
 6. Order sprints logically (foundation → features → polish)
 7. Keep MVP scope tight - max 5 sprints
 
+REASONING GUIDANCE:
 Think step-by-step about:
 - What needs to be set up first? (Sprint 0)
 - What is the core feature that proves the concept?
 - What features build on each other?
 - What can be deferred to Version 2?
 
-Output the complete markdown document with all sprint sections."#.to_string();
+After reasoning, output the complete markdown document with all sprint sections."#.to_string();
 
         let user_prompt = format!(
             r#"Based on this vision, scope, tech stack, and architecture, generate a comprehensive MVP Breakdown:
@@ -385,6 +413,7 @@ Generate the MVP Breakdown document now. Remember:
     }
 
     /// Render the complete prompt as a single string (for simple LLM clients)
+    #[allow(dead_code)] // Public API for future use
     pub fn render(&self) -> String {
         format!("{}\n\n{}", self.system_prompt, self.user_prompt)
     }

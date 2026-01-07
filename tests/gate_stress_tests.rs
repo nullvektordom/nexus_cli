@@ -16,7 +16,7 @@ fn create_nexus_config(project_path: &Path, vault_path: &Path) {
         r#"[project]
 name = "test_project"
 version = "0.1.0"
-obsidian_path = "{}"
+obsidian_path = "{vault_path_str}"
 
 [structure]
 planning_dir = "01-PLANNING"
@@ -36,8 +36,7 @@ status = "in_progress"
 
 [templates]
 claude_template = "templates/CLAUDE.md.example"
-"#,
-        vault_path_str
+"#
     );
     fs::write(project_path.join("nexus.toml"), &config_content).unwrap();
 }
@@ -74,10 +73,10 @@ fn create_heuristics(vault_path: &Path) {
 
 /// Helper to create a valid dashboard
 fn create_valid_dashboard(path: &PathBuf) {
-    let content = r#"# Dashboard
+    let content = r"# Dashboard
 - [x] Task 1 completed
 - [x] Task 2 completed
-"#;
+";
     fs::write(path, content).unwrap();
 }
 
@@ -135,8 +134,8 @@ fn test_stress_empty_vault_no_planning_docs() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     // Create empty planning directory
     let planning_dir = vault_path.join("01-PLANNING");
@@ -164,8 +163,8 @@ fn test_stress_empty_vault_missing_dashboard() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     // Create empty management directory (no dashboard)
     let management_dir = vault_path.join("00-MANAGEMENT");
@@ -195,8 +194,8 @@ fn test_stress_malformed_utf8_in_planning_doc() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     let planning_dir = vault_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -228,8 +227,8 @@ fn test_stress_malformed_utf8_in_dashboard() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     let management_dir = vault_path.join("00-MANAGEMENT");
     fs::create_dir_all(&management_dir).unwrap();
@@ -268,8 +267,8 @@ fn test_stress_permission_denied_planning_doc() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     let planning_dir = vault_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -313,7 +312,7 @@ fn test_stress_missing_heuristics_file() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
 
     // Don't create heuristics file
 
@@ -338,8 +337,8 @@ fn test_stress_large_markdown_file() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     let planning_dir = vault_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();
@@ -350,8 +349,7 @@ fn test_stress_large_markdown_file() {
     // Generate 150MB of text
     for i in 0..3_000_000 {
         content.push_str(&format!(
-            "This is line number {} with some padding text to make it longer. ",
-            i
+            "This is line number {i} with some padding text to make it longer. "
         ));
         if i % 20 == 0 {
             content.push('\n');
@@ -384,7 +382,7 @@ fn test_stress_malformed_heuristics_json() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
 
     // Write malformed JSON to heuristics file
     let bad_json = r#"{
@@ -414,8 +412,8 @@ fn test_stress_planning_dir_with_non_md_files() {
     let vault_path = project_path.join("vault");
 
     fs::create_dir_all(&vault_path).unwrap();
-    create_nexus_config(project_path, &vault_path.to_path_buf());
-    create_heuristics(&vault_path.to_path_buf());
+    create_nexus_config(project_path, &vault_path.clone());
+    create_heuristics(&vault_path.clone());
 
     let planning_dir = vault_path.join("01-PLANNING");
     fs::create_dir_all(&planning_dir).unwrap();

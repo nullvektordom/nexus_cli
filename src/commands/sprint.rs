@@ -7,7 +7,7 @@ use crate::git_ops::create_sprint_branch;
 use crate::planning::parse_mvp_sprints;
 use crate::scaffolding::scaffold_sprint_folder;
 use anyhow::{Context, Result, bail};
-use colored::*;
+use colored::Colorize;
 use std::fs;
 use std::path::Path;
 
@@ -73,8 +73,7 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
             "You must complete and approve the current sprint before starting a new one.".white()
         );
         bail!(
-            "Cannot start Sprint {} until previous sprint is approved. Please complete the current sprint first.",
-            sprint_number
+            "Cannot start Sprint {sprint_number} until previous sprint is approved. Please complete the current sprint first."
         );
     }
 

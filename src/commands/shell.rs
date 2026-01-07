@@ -29,7 +29,7 @@ pub fn execute() -> Result<()> {
     // Initialize embeddings (local ONNX model for semantic search)
     if let Err(e) = crate::embeddings::initialize_embeddings("models/model.onnx", "models/tokenizer.json") {
         eprintln!("{}", "Warning: Failed to initialize embeddings:".yellow());
-        eprintln!("  {}", e);
+        eprintln!("  {e}");
         eprintln!("{}", "  Semantic search will be degraded. Planning Catalyst features will use zero vectors.".yellow());
         eprintln!();
     } else {
@@ -69,7 +69,7 @@ pub fn execute() -> Result<()> {
             };
             format!(
                 "{} ",
-                format!("nexus:{}{}{}❯", project, watch_indicator, context_indicator)
+                format!("nexus:{project}{watch_indicator}{context_indicator}❯")
                     .cyan()
                     .bold()
             )
@@ -137,6 +137,7 @@ pub fn execute() -> Result<()> {
 }
 
 /// Print the welcome banner with session information
+#[allow(clippy::unnecessary_wraps)] // Consistent API, may add validation later
 fn print_banner(state: &NexusState) -> Result<()> {
     println!(
         "{}",
@@ -361,7 +362,7 @@ fn execute_use(state: &mut NexusState, args: &[&str]) -> Result<()> {
 
     println!(
         "{}",
-        format!("Selecting project '{}'...", project_id).dimmed()
+        format!("Selecting project '{project_id}'...").dimmed()
     );
 
     // Validate that the project exists
@@ -403,7 +404,7 @@ fn execute_gate(state: &NexusState, last_gate_error: &Arc<Mutex<Option<String>>>
     println!("{}", "Running gate...".dimmed());
 
     match crate::commands::gate::execute(&project_path) {
-        Ok(_) => {
+        Ok(()) => {
             // Clear error on success
             *last_gate_error.lock().unwrap() = None;
             Ok(())
@@ -442,7 +443,7 @@ fn execute_sprint(state: &NexusState, args: &[&str]) -> Result<()> {
 
     println!(
         "{}",
-        format!("Activating sprint {}...", sprint_number).dimmed()
+        format!("Activating sprint {sprint_number}...").dimmed()
     );
     crate::commands::sprint::execute(&project_path, sprint_number)
 }
@@ -451,6 +452,25 @@ fn execute_sprint(state: &NexusState, args: &[&str]) -> Result<()> {
 fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
     use crate::catalyst::CatalystEngine;
     use crate::llm::{LlmClient, LlmProvider};
+
+    // Parse flags
+    let mut show_reasoning = false;
+    let mut command_args = Vec::new();
+    
+    for arg in args {
+        if *arg == "--show-reasoning" || *arg == "-r" {
+            show_reasoning = true;
+        } else {
+            command_args.push(*arg);
+        }
+    }
+
+    // Set environment variable for reasoning display
+    if show_reasoning {
+        unsafe {
+            std::env::set_var("CATALYST_SHOW_REASONING", "1");
+        }
+    }
 
     let project_id = state
         .active_project_id
@@ -540,15 +560,29 @@ fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
         )?;
 
         // Execute subcommand
-        let subcommand = args.get(0).map(|s| s.to_lowercase());
-        match subcommand.as_deref() {
+        let subcommand = command_args.first().map(|s| s.to_lowercase());
+        let result = match subcommand.as_deref() {
             Some("scope") => engine.generate_scope().await,
             Some("stack") => engine.generate_tech_stack().await,
-            Some("arch") | Some("architecture") => engine.generate_architecture().await,
-            Some("mvp") | Some("breakdown") => engine.generate_mvp_breakdown().await,
-            Some("generate") | Some("all") => {
+            Some("arch" | "architecture") => engine.generate_architecture().await,
+            Some("mvp" | "breakdown") => engine.generate_mvp_breakdown().await,
+            Some("generate" | "all") => {
                 let report = engine.generate_all().await?;
                 report.print_summary();
+                Ok(())
+            }
+            Some("refine") => {
+                if command_args.len() < 3 {
+                    anyhow::bail!("Usage: catalyst refine <doc> <feedback>\nExample: catalyst refine scope \"Add mobile app to MVP\"");
+                }
+                let doc_name = command_args[1];
+                let feedback = command_args[2..].join(" ");
+                let doc_type = parse_doc_type(doc_name)?;
+                engine.refine_document(doc_type, &feedback).await
+            }
+            Some("status") => {
+                let status = engine.status();
+                status.print_summary();
                 Ok(())
             }
             Some("help") | None => {
@@ -556,30 +590,60 @@ fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
                 Ok(())
             }
             Some(cmd) => {
-                anyhow::bail!("Unknown catalyst command: '{}'. Use 'catalyst help' for usage.", cmd)
+                anyhow::bail!("Unknown catalyst command: '{cmd}'. Use 'catalyst help' for usage.")
+            }
+        };
+
+        // Clean up environment variable
+        if show_reasoning {
+            unsafe {
+                std::env::remove_var("CATALYST_SHOW_REASONING");
             }
         }
+
+        result
     })
+}
+
+/// Parse document type from string
+fn parse_doc_type(name: &str) -> Result<crate::catalyst::DocumentType> {
+    use crate::catalyst::DocumentType;
+    
+    match name.to_lowercase().as_str() {
+        "scope" => Ok(DocumentType::Scope),
+        "stack" | "tech" | "techstack" => Ok(DocumentType::TechStack),
+        "arch" | "architecture" => Ok(DocumentType::Architecture),
+        "mvp" | "breakdown" => Ok(DocumentType::MvpBreakdown),
+        _ => anyhow::bail!(
+            "Unknown document type: '{name}'. Valid types: scope, stack, arch, mvp"
+        ),
+    }
 }
 
 /// Print catalyst-specific help
 fn print_catalyst_help() {
     println!("{}", "Planning Catalyst - AI Document Generation".bold().underline());
     println!();
-    println!("{}", "Individual Document Generation:".bold());
+    println!("{}", "Document Generation:".bold());
     println!("  {} scope      Generate 02-Scope-and-Boundaries.md", "catalyst".cyan());
     println!("  {} stack      Generate 03-Tech-Stack.md", "catalyst".cyan());
     println!("  {} arch       Generate 04-Architecture.md", "catalyst".cyan());
     println!("  {} mvp        Generate 05-MVP-Breakdown.md", "catalyst".cyan());
-    println!();
-    println!("{}", "Sequential Generation:".bold());
     println!("  {} generate   Generate all documents (02-05) sequentially", "catalyst".cyan());
-    println!("  {} all        Alias for 'generate'", "catalyst".cyan());
+    println!();
+    println!("{}", "Refinement & Status:".bold());
+    println!("  {} refine <doc> <feedback>  Refine a document with feedback", "catalyst".cyan());
+    println!("    Example: catalyst refine scope \"Add mobile app to MVP\"");
+    println!("  {} status     Show generation status for all documents", "catalyst".cyan());
+    println!();
+    println!("{}", "Flags:".bold());
+    println!("  {} --show-reasoning  Display model's reasoning process", "-r,".dimmed());
     println!();
     println!("{}", "Prerequisites:".bold());
     println!("  • Complete 01-Problem-and-Vision.md manually");
     println!("  • Configure LLM in nexus.toml ([llm] section)");
     println!("  • Set OPENROUTER_API_KEY environment variable");
+    println!("  • Recommended: Use reasoning models like deepseek/deepseek-r1");
     println!();
     println!("{}", "Example workflows:".dimmed());
     println!();
@@ -594,6 +658,9 @@ fn print_catalyst_help() {
     println!("    3. Review scope, then run 'catalyst stack'");
     println!("    4. Review stack, then run 'catalyst arch'");
     println!("    5. Review architecture, then run 'catalyst mvp'");
+    println!();
+    println!("  {} With reasoning display:", "Option 3:".bold());
+    println!("    Run 'catalyst generate --show-reasoning' to see model's thinking");
     println!();
 }
 
@@ -894,7 +961,7 @@ fn execute_why(state: &NexusState, last_gate_error: &Arc<Mutex<Option<String>>>)
 ///
 /// Supported flags:
 /// - `--global`: Search across all projects (bypass project filter)
-/// - `--arch`: Only search Architecture and GlobalStandard layers
+/// - `--arch`: Only search Architecture and `GlobalStandard` layers
 fn execute_semantic_query(input: &str, state: &NexusState) -> Result<()> {
     use crate::brain::Layer;
 
@@ -1174,17 +1241,17 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         };
 
         // Show context summary
-        if !context.architecture.snippets.is_empty() {
+        if context.architecture.snippets.is_empty() {
             println!(
-                "  {} Retrieved {} architecture snippets (score ≥ {})",
-                "✓".green(),
-                context.architecture.snippets.len(),
+                "  {} No architecture snippets above threshold ({})",
+                "⚠".yellow(),
                 RELEVANCE_THRESHOLD
             );
         } else {
             println!(
-                "  {} No architecture snippets above threshold ({})",
-                "⚠".yellow(),
+                "  {} Retrieved {} architecture snippets (score ≥ {})",
+                "✓".green(),
+                context.architecture.snippets.len(),
                 RELEVANCE_THRESHOLD
             );
         }
@@ -1200,7 +1267,7 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         // Prepend conversation history if available
         if !history.is_empty() {
             let history_context = history.get_context_string();
-            prompt = format!("{}\n{}", history_context, prompt);
+            prompt = format!("{history_context}\n{prompt}");
             println!("  {} Included {} previous conversation turns", "✓".green(), history.len());
         }
 
@@ -1221,13 +1288,13 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
     })?;
 
     // Print response
-    println!("{}", result);
+    println!("{result}");
     println!();
 
     // Save conversation turn to history
     history.add_turn(input.to_string(), Some(result.clone()));
     if let Err(e) = history.save(&obsidian_path) {
-        eprintln!("Warning: Failed to save conversation history: {}", e);
+        eprintln!("Warning: Failed to save conversation history: {e}");
     }
 
     Ok(())

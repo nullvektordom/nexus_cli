@@ -1,4 +1,4 @@
-/// Document validation for generated planning documents
+//! Document validation for generated planning documents
 
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -9,7 +9,7 @@ use crate::planning::validate_planning_document_with_headers;
 /// Validate a generated document against its expected structure
 pub fn validate_generated_document(
     doc_type: DocumentType,
-    content: &str,
+    _content: &str,
     path: &Path,
 ) -> Result<bool> {
     let (required_headers, min_word_count) = get_validation_requirements(doc_type);
@@ -33,9 +33,9 @@ pub fn validate_generated_document(
 
     if !validation.passed {
         // Log validation errors for debugging
-        eprintln!("Validation failed for {:?}:", doc_type);
+        eprintln!("Validation failed for {doc_type:?}:");
         for issue in &validation.issues {
-            eprintln!("  - {:?}", issue);
+            eprintln!("  - {issue:?}");
         }
     }
 
@@ -82,6 +82,7 @@ fn get_validation_requirements(doc_type: DocumentType) -> (Vec<String>, usize) {
 }
 
 /// Check if a document contains placeholder text that should be replaced
+#[allow(dead_code)] // Public API for future validation features
 pub fn contains_placeholders(content: &str) -> bool {
     let placeholders = [
         "TODO",
@@ -104,6 +105,7 @@ pub fn contains_placeholders(content: &str) -> bool {
 }
 
 /// Extract section content from markdown by header
+#[allow(dead_code)] // Public API for future validation features
 pub fn extract_section(content: &str, header: &str) -> Option<String> {
     let lines: Vec<&str> = content.lines().collect();
     let mut in_section = false;
@@ -145,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_extract_section() {
-        let content = r#"
+        let content = r"
 ## MVP (Minimum Viable Product):
 
 This is the MVP content.
@@ -154,7 +156,7 @@ It has multiple lines.
 ## Version 2:
 
 This is version 2 content.
-"#;
+";
 
         let mvp = extract_section(content, "MVP (Minimum Viable Product):");
         assert!(mvp.is_some());

@@ -1,4 +1,4 @@
-/// Document generation types and context management
+//! Document generation types and context management
 
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,7 @@ pub enum DocumentType {
 
 impl DocumentType {
     /// Get the filename for this document type
+    #[allow(clippy::trivially_copy_pass_by_ref)] // Consistent with trait patterns
     pub fn filename(&self) -> &'static str {
         match self {
             DocumentType::Scope => "02-Scope-and-Boundaries.md",
@@ -27,6 +28,8 @@ impl DocumentType {
     }
 
     /// Get a human-readable name for this document type
+    #[allow(dead_code)] // Public API for future use
+    #[allow(clippy::trivially_copy_pass_by_ref)] // Consistent with trait patterns
     pub fn display_name(&self) -> &'static str {
         match self {
             DocumentType::Scope => "Scope and Boundaries",
@@ -51,7 +54,8 @@ pub struct VisionData {
 }
 
 impl VisionData {
-    /// Create an empty VisionData
+    /// Create an empty `VisionData`
+    #[allow(dead_code)] // Public API for testing/future use
     pub fn empty() -> Self {
         Self {
             problem: String::new(),

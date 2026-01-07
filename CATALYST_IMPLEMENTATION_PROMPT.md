@@ -221,12 +221,29 @@ src/catalyst/
 
 ### Phase 3: Sequential Thinking Integration
 
-**Objective**: Integrate MCP `sequentialthinking` server for improved reasoning quality.
+**Objective**: Integrate self-hosted MCP `sequentialthinking` server for improved reasoning quality.
+
+#### Infrastructure Details
+
+**Sequential Thinking MCP Server**:
+- **Deployment**: Self-hosted on remote server (accessible via Tailscale network)
+- **Protocol**: HTTP Server-Sent Events (SSE)
+- **URL**: `http://100.105.8.97:8000/sse`
+- **Configuration**: Environment variable `SEQUENTIAL_THINKING_URL` in `.env` file
+
+**Connection Strategy**:
+- Read URL from environment variable (fallback to hardcoded default)
+- Use HTTP client with SSE support (not stdio like local MCP)
+- Handle network timeouts and connection failures gracefully
+- Validate server availability before attempting generation
 
 #### Tasks
 
-1. **Create MCP wrapper in `src/catalyst/thinking.rs`**
+1. **Create MCP SSE client in `src/catalyst/thinking.rs`**
    ```rust
+   use reqwest::Client;
+   use std::env;
+   
    pub struct ThinkingSession {
        thoughts: Vec<ThoughtStep>,
        final_answer: Option<String>,
@@ -238,40 +255,354 @@ src/catalyst/
        is_revision: bool,
    }
    
-   pub async fn generate_with_thinking(
-       prompt: &str,
-       llm_client: &LlmClient,
-   ) -> Result<(String, ThinkingSession)>;
+   pub struct ThinkingClient {
+       server_url: String,
+       http_client: Client,
+   }
+   
+   impl ThinkingClient {
+       /// Create new MCP client, reading URL from environment
+       pub fn new() -> Result<Self> {
+           let server_url = env::var("SEQUENTIAL_THINKING_URL")
+               .unwrap_or_else(|_| "http://100.105.8.97:8000/sse".to_string());
+           
+           Ok(Self {
+               server_url,
+               http_client: Client::new(),
+           })
+       }
+       
+       /// Check if the MCP server is reachable
+       pub async fn health_check(&self) -> Result<bool> {
+           // Implement health check endpoint
+       }
+       
+       /// Generate document with sequential thinking
+       pub async fn generate_with_thinking(
+           &self,
+           prompt: &str,
+           llm_client: &LlmClient,
+       ) -> Result<(String, ThinkingSession)> {
+           // Connect to SSE endpoint
+           // Stream thinking steps
+           // Collect final answer
+       }
+   }
    ```
 
-2. **Update prompts to request reasoning**
+2. **Add environment variable support**
+   - Create `.env.example` with:
+     ```bash
+     SEQUENTIAL_THINKING_URL=http://100.105.8.97:8000/sse
+     ```
+   - Load environment variables using `dotenv` crate
+   - Document in README that `.env` file is optional (uses default if missing)
+
+3. **Update prompts to request reasoning**
    - Modify templates to request "step-by-step thinking"
    - Structure: "Think through X, then provide final document"
-   - Guide model to use MCP thinking tool
+   - Include instructions for the thinking MCP to structure responses
 
-3. **Integrate with generator**
+4. **Integrate with generator**
    - Update `DocumentGenerator` to use thinking when enabled
+   - Add fallback: if MCP server unavailable, use direct LLM generation
    - Capture thinking steps for transparency
    - Extract final answer from thinking session
 
-4. **Add configuration**
+5. **Add configuration**
    - Add `[catalyst]` section to `nexus.toml`:
      ```toml
      [catalyst]
      enabled = true
-     use_thinking = true
-     show_thinking = false  # Debug mode
+     use_thinking = true          # Toggle sequential thinking integration
+     thinking_timeout_secs = 120  # Max time to wait for thinking response
+     show_thinking = false        # Debug mode: display reasoning steps
      ```
 
-5. **Add `--show-thinking` flag**
-   - Optional flag to display reasoning process
-   - Helps debug generation quality issues
+6. **Add `--show-thinking` flag**
+   - Optional flag to display reasoning process in REPL
+   - Shows each thinking step with timestamps
+   - Helps debug generation quality issues and MCP connectivity
+
+7. **Error handling for remote MCP**
+   - Network timeouts: Fall back to direct generation after timeout
+   - Connection refused: Warn user and continue without thinking
+   - Invalid SSE format: Log error and retry with direct generation
+   - Clear error messages: "Sequential thinking server unreachable, using direct generation"
 
 #### Acceptance Criteria for Phase 3
-- [ ] Generation uses sequential thinking MCP
-- [ ] Document quality improves (subjective but measurable)
+- [ ] Reads `SEQUENTIAL_THINKING_URL` from environment (or uses default)
+- [ ] Successfully connects to remote MCP server via SSE
+- [ ] Generation uses sequential thinking when server is available
+- [ ] Gracefully falls back to direct generation if server unavailable
+- [ ] Document quality improves (measurable via validation pass rate)
 - [ ] Can toggle thinking on/off via config
-- [ ] `--show-thinking` displays reasoning steps
+- [ ] `--show-thinking` displays reasoning steps with timestamps
+- [ ] Network errors are handled gracefully with clear user feedback
+
+---
+
+### Phase 3.1: Filesystem MCP Integration
+
+**Objective**: Provide LLM with controlled filesystem access via local MCP server for reading existing planning documents and project files.
+
+#### Rationale
+
+The LLM needs filesystem access to:
+1. **Read existing planning documents** - Build context from previously generated docs
+2. **Inspect project structure** - Understand folder layouts for architecture generation
+3. **Reference template files** - Ensure generated documents match template structure
+4. **Read user notes** - Incorporate insights from Obsidian vault
+
+#### Infrastructure Details
+
+**Filesystem MCP Server**:
+- **Deployment**: Local child process spawned by nexus
+- **Package**: `@modelcontextprotocol/server-filesystem` (stdio-based MCP)
+- **Protocol**: JSON-RPC over stdio (stdin/stdout)
+- **Configuration**: Environment variable `FILESYSTEM_PATHS` in `.env` file
+- **Allowed Paths**: Colon-separated list (e.g., `/home/nullvektor/oblivion:/home/nullvektor/repos`)
+
+**Security Model**:
+- MCP server enforces path restrictions (cannot access files outside configured paths)
+- Read-only access by default (no writes without explicit tool use)
+- Process lifecycle managed by catalyst engine (spawn on start, cleanup on exit)
+
+#### Tasks
+
+1. **Create MCP process manager in `src/catalyst/filesystem_mcp.rs`**
+   ```rust
+   use std::process::{Child, Command, Stdio};
+   use std::io::{BufRead, BufReader, Write};
+   use serde_json::Value;
+   
+   pub struct FilesystemMcpServer {
+       process: Child,
+       allowed_paths: Vec<String>,
+   }
+   
+   impl FilesystemMcpServer {
+       /// Spawn the filesystem MCP server as a child process
+       pub fn spawn() -> Result<Self> {
+           // Read paths from environment
+           let paths_str = std::env::var("FILESYSTEM_PATHS")
+               .unwrap_or_else(|_| "/home/nullvektor/oblivion:/home/nullvektor/repos".to_string());
+           
+           let allowed_paths: Vec<String> = paths_str
+               .split(':')
+               .map(|s| s.to_string())
+               .collect();
+           
+           // Build command arguments
+           let mut args = vec![
+               "-y".to_string(),
+               "@modelcontextprotocol/server-filesystem".to_string(),
+           ];
+           args.extend(allowed_paths.clone());
+           
+           // Spawn process
+           let mut process = Command::new("npx")
+               .args(&args)
+               .stdin(Stdio::piped())
+               .stdout(Stdio::piped())
+               .stderr(Stdio::piped())
+               .spawn()
+               .context("Failed to spawn filesystem MCP server")?;
+           
+           Ok(Self {
+               process,
+               allowed_paths,
+           })
+       }
+       
+       /// Send JSON-RPC request to MCP server
+       pub fn call_tool(&mut self, tool_name: &str, params: Value) -> Result<Value> {
+           let request = serde_json::json!({
+               "jsonrpc": "2.0",
+               "id": 1,
+               "method": tool_name,
+               "params": params,
+           });
+           
+           // Write to stdin
+           let stdin = self.process.stdin.as_mut()
+               .ok_or_else(|| anyhow::anyhow!("Failed to get stdin"))?;
+           
+           writeln!(stdin, "{}", request.to_string())?;
+           stdin.flush()?;
+           
+           // Read from stdout
+           let stdout = self.process.stdout.as_mut()
+               .ok_or_else(|| anyhow::anyhow!("Failed to get stdout"))?;
+           
+           let reader = BufReader::new(stdout);
+           let mut line = String::new();
+           reader.read_line(&mut line)?;
+           
+           let response: Value = serde_json::from_str(&line)?;
+           Ok(response)
+       }
+       
+       /// Read file via MCP server
+       pub fn read_file(&mut self, path: &str) -> Result<String> {
+           let params = serde_json::json!({ "path": path });
+           let response = self.call_tool("read_file", params)?;
+           
+           // Extract content from response
+           let content = response["result"]["content"]
+               .as_str()
+               .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?
+               .to_string();
+           
+           Ok(content)
+       }
+       
+       /// List directory via MCP server
+       pub fn list_directory(&mut self, path: &str) -> Result<Vec<String>> {
+           let params = serde_json::json!({ "path": path });
+           let response = self.call_tool("list_directory", params)?;
+           
+           // Extract file list from response
+           let files: Vec<String> = response["result"]["files"]
+               .as_array()
+               .ok_or_else(|| anyhow::anyhow!("Invalid response format"))?
+               .iter()
+               .filter_map(|v| v.as_str().map(String::from))
+               .collect();
+           
+           Ok(files)
+       }
+   }
+   
+   impl Drop for FilesystemMcpServer {
+       fn drop(&mut self) {
+           // Gracefully shutdown MCP server on drop
+           let _ = self.process.kill();
+           let _ = self.process.wait();
+       }
+   }
+   ```
+
+2. **Add environment variable support**
+   - Update `.env.example`:
+     ```bash
+     SEQUENTIAL_THINKING_URL=http://100.105.8.97:8000/sse
+     FILESYSTEM_PATHS=/home/nullvektor/oblivion:/home/nullvektor/repos
+     ```
+   - Document that paths should be colon-separated
+   - Default paths if env var not set
+
+3. **Integrate with `CatalystEngine`**
+   ```rust
+   pub struct CatalystEngine {
+       project_id: String,
+       obsidian_path: PathBuf,
+       llm_client: LlmClient,
+       filesystem_mcp: Option<FilesystemMcpServer>,
+   }
+   
+   impl CatalystEngine {
+       pub fn new(
+           project_id: String,
+           obsidian_path: PathBuf,
+           llm_config: &LlmConfig,
+       ) -> Result<Self> {
+           // Spawn filesystem MCP if enabled
+           let filesystem_mcp = if config.catalyst.use_filesystem_mcp {
+               Some(FilesystemMcpServer::spawn()?)
+           } else {
+               None
+           };
+           
+           Ok(Self {
+               project_id,
+               obsidian_path,
+               llm_client: create_llm_client(llm_config)?,
+               filesystem_mcp,
+           })
+       }
+   }
+   ```
+
+4. **Use MCP for reading planning documents**
+   - Replace direct `fs::read_to_string()` calls with MCP reads
+   - Add fallback: if MCP unavailable, use direct filesystem access
+   - Log when MCP is used vs direct access for debugging
+   
+   ```rust
+   fn load_vision_document(&mut self) -> Result<VisionData> {
+       let vision_path = self.obsidian_path
+           .join("01-PLANNING/01-Problem-and-Vision.md");
+       
+       let content = if let Some(ref mut mcp) = self.filesystem_mcp {
+           // Use MCP to read file
+           mcp.read_file(&vision_path.to_string_lossy())?
+       } else {
+           // Fallback to direct filesystem access
+           std::fs::read_to_string(&vision_path)?
+       };
+       
+       parse_vision_content(&content)
+   }
+   ```
+
+5. **Add configuration in `nexus.toml`**
+   ```toml
+   [catalyst]
+   enabled = true
+   use_thinking = true
+   use_filesystem_mcp = true  # Enable filesystem MCP integration
+   filesystem_timeout_secs = 10
+   show_thinking = false
+   ```
+
+6. **Error handling**
+   - MCP spawn failure: Fall back to direct filesystem access
+   - Tool call timeout: Retry once, then fallback
+   - Invalid path (outside allowed): Clear error message
+   - Process crash: Detect and restart MCP if needed
+
+7. **Add logging for transparency**
+   - Log when MCP server is spawned
+   - Log each tool call (file read, directory list)
+   - Log fallback to direct access
+   - Helps debug permission issues
+
+#### Acceptance Criteria for Phase 3.1
+- [ ] Successfully spawns filesystem MCP server with configured paths
+- [ ] Can read planning documents via MCP `read_file` tool
+- [ ] Can list directories via MCP `list_directory` tool
+- [ ] Gracefully falls back to direct filesystem access if MCP unavailable
+- [ ] Process cleanup on engine drop (no zombie processes)
+- [ ] Respects allowed path restrictions
+- [ ] Clear error messages for permission violations
+- [ ] Logging shows MCP usage vs direct access
+
+#### Integration with Document Generation
+
+The filesystem MCP enables the LLM to:
+
+1. **Build Progressive Context**:
+   ```rust
+   // When generating Tech Stack, read previously generated Scope
+   let scope_content = filesystem_mcp.read_file("02-Scope-and-Boundaries.md")?;
+   let scope_data = parse_scope_document(&scope_content)?;
+   context.scope = Some(scope_data);
+   ```
+
+2. **Reference Templates**:
+   ```rust
+   // Read template to ensure output format matches
+   let template = filesystem_mcp.read_file("templates/project/03-Tech-Stack.md")?;
+   prompt.add_context("Template structure", &template);
+   ```
+
+3. **Inspect Project Files**:
+   ```rust
+   // For architecture generation, read existing folder structure
+   let files = filesystem_mcp.list_directory(&project_repo_path)?;
+   prompt.add_context("Existing project structure", &files.join("\n"));
+   ```
 
 ---
 
