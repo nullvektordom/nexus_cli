@@ -24,6 +24,9 @@ impl EmbeddingGenerator {
     /// * `model_path` - Path to the ONNX model file
     /// * `tokenizer_path` - Path to the tokenizer JSON file
     ///
+    /// # Errors
+    /// Returns an error if the ONNX model or tokenizer cannot be loaded
+    ///
     /// # Example
     /// ```no_run
     /// use nexus::embeddings::EmbeddingGenerator;
@@ -43,11 +46,11 @@ impl EmbeddingGenerator {
             .with_intra_threads(4)
             .context("Failed to set intra threads")?
             .commit_from_file(model_path)
-            .with_context(|| format!("Failed to load ONNX model from: {}", model_path))?;
+            .with_context(|| format!("Failed to load ONNX model from: {model_path}"))?;
 
         // Load tokenizer
         let tokenizer = Tokenizer::from_file(tokenizer_path)
-            .map_err(|e| anyhow::anyhow!("Failed to load tokenizer from {}: {}", tokenizer_path, e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to load tokenizer from {tokenizer_path}: {e}"))?;
 
         Ok(Self {
             session,
@@ -62,12 +65,15 @@ impl EmbeddingGenerator {
     ///
     /// # Returns
     /// A 384-dimensional embedding vector
+    ///
+    /// # Errors
+    /// Returns an error if tokenization or inference fails
     pub fn embed(&mut self, text: &str) -> Result<Vec<f32>> {
         // Tokenize input
         let encoding = self
             .tokenizer
             .encode(text, true)
-            .map_err(|e| anyhow::anyhow!("Failed to tokenize text: {}", e))?;
+            .map_err(|e| anyhow::anyhow!("Failed to tokenize text: {e}"))?;
 
         let input_ids = encoding.get_ids();
         let attention_mask = encoding.get_attention_mask();
@@ -78,19 +84,19 @@ impl EmbeddingGenerator {
         // Convert to ndarray format
         let input_ids_array = Array2::from_shape_vec(
             (1, input_ids.len()),
-            input_ids.iter().map(|&id| id as i64).collect(),
+            input_ids.iter().map(|&id| i64::from(id)).collect(),
         )
         .context("Failed to create input_ids array")?;
 
         let attention_mask_array = Array2::from_shape_vec(
             (1, attention_mask.len()),
-            attention_mask.iter().map(|&mask| mask as i64).collect(),
+            attention_mask.iter().map(|&mask| i64::from(mask)).collect(),
         )
         .context("Failed to create attention_mask array")?;
 
         let token_type_ids_array = Array2::from_shape_vec(
             (1, token_type_ids.len()),
-            token_type_ids.iter().map(|&id| id as i64).collect(),
+            token_type_ids.iter().map(|&id| i64::from(id)).collect(),
         )
         .context("Failed to create token_type_ids array")?;
 
@@ -123,9 +129,12 @@ impl EmbeddingGenerator {
             anyhow::bail!("Expected 3D tensor, got {}D", shape_dims.len());
         }
 
-        let batch_size = shape_dims[0] as usize;
-        let seq_len = shape_dims[1] as usize;
-        let hidden_size = shape_dims[2] as usize;
+        let batch_size = usize::try_from(shape_dims[0])
+            .context("Batch size conversion failed")?;
+        let seq_len = usize::try_from(shape_dims[1])
+            .context("Sequence length conversion failed")?;
+        let hidden_size = usize::try_from(shape_dims[2])
+            .context("Hidden size conversion failed")?;
 
         // Copy data to owned Vec to avoid lifetime issues
         let data_owned = data.to_vec();
@@ -134,12 +143,13 @@ impl EmbeddingGenerator {
         drop(outputs);
 
         // Mean pooling over sequence length
-        let embedding_vec = self.mean_pooling_direct(&data_owned, batch_size, seq_len, hidden_size, &attention_mask)?;
+        let embedding_vec = self.mean_pooling_direct(&data_owned, batch_size, seq_len, hidden_size, attention_mask)?;
 
         Ok(embedding_vec)
     }
 
     /// Perform mean pooling over the sequence dimension (direct from flattened data)
+    #[allow(clippy::cast_precision_loss)] // u32 to f32 is acceptable for mask averaging
     fn mean_pooling_direct(
         &self,
         data: &[f32],
@@ -149,7 +159,7 @@ impl EmbeddingGenerator {
         attention_mask: &[u32],
     ) -> Result<Vec<f32>> {
         if batch_size != 1 {
-            anyhow::bail!("Expected batch_size=1, got {}", batch_size);
+            anyhow::bail!("Expected batch_size=1, got {batch_size}");
         }
 
         if seq_len != attention_mask.len() {
@@ -164,8 +174,7 @@ impl EmbeddingGenerator {
         let mut pooled = vec![0.0f32; hidden_size];
         let mut mask_sum = 0u32;
 
-        for seq_idx in 0..seq_len {
-            let mask_value = attention_mask[seq_idx];
+        for (seq_idx, &mask_value) in attention_mask.iter().enumerate().take(seq_len) {
             mask_sum += mask_value;
 
             if mask_value > 0 {
@@ -178,7 +187,7 @@ impl EmbeddingGenerator {
 
         // Compute mean
         if mask_sum > 0 {
-            for value in pooled.iter_mut() {
+            for value in &mut pooled {
                 *value /= mask_sum as f32;
             }
         }
@@ -186,7 +195,7 @@ impl EmbeddingGenerator {
         // Normalize to unit vector
         let norm: f32 = pooled.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm > 0.0 {
-            for value in pooled.iter_mut() {
+            for value in &mut pooled {
                 *value /= norm;
             }
         }
@@ -195,6 +204,10 @@ impl EmbeddingGenerator {
     }
 
     /// Batch generate embeddings for multiple texts
+    ///
+    /// # Errors
+    /// Returns an error if any text fails to embed
+    #[allow(dead_code)] // Public API for future batch processing
     pub fn embed_batch(&mut self, texts: &[&str]) -> Result<Vec<Vec<f32>>> {
         texts.iter().map(|text| self.embed(text)).collect()
     }
@@ -211,6 +224,9 @@ static EMBEDDING_GENERATOR: std::sync::OnceLock<std::sync::Mutex<EmbeddingGenera
 /// # Arguments
 /// * `model_path` - Path to the ONNX model file
 /// * `tokenizer_path` - Path to the tokenizer JSON file
+///
+/// # Errors
+/// Returns an error if the model/tokenizer cannot be loaded or if already initialized
 pub fn initialize_embeddings(model_path: &str, tokenizer_path: &str) -> Result<()> {
     let generator = EmbeddingGenerator::new(model_path, tokenizer_path)?;
     EMBEDDING_GENERATOR
@@ -225,6 +241,9 @@ pub fn initialize_embeddings(model_path: &str, tokenizer_path: &str) -> Result<(
 ///
 /// # Returns
 /// A 384-dimensional embedding vector (for all-MiniLM-L6-v2)
+///
+/// # Errors
+/// Returns an error if the generator is not initialized or embedding fails
 ///
 /// # Panics
 /// Panics if the embedding generator has not been initialized

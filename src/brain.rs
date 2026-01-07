@@ -3,8 +3,8 @@
 //! Manages connection to the Hetzner Qdrant node for semantic search and knowledge storage.
 //! Provides methods for:
 //! - Connecting to Qdrant via gRPC over Tailscale
-//! - Managing the nexus_brain collection
-//! - Storing vectors with rich metadata (project_id, file_path, layer, machine_id, sprint_number)
+//! - Managing the `nexus_brain` collection
+//! - Storing vectors with rich metadata (`project_id`, `file_path`, layer, `machine_id`, `sprint_number`)
 //! - Querying the semantic brain with advanced filtering
 
 use anyhow::{Context, Result};
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 /// Collection name for the Nexus brain
 pub const COLLECTION_NAME: &str = "nexus_brain";
 
-/// Vector dimension size (using OpenAI ada-002 compatible size)
+/// Vector dimension size (using `OpenAI` ada-002 compatible size)
 pub const VECTOR_SIZE: u64 = 1536;
 
 /// Layer categorization for knowledge organization
@@ -124,14 +124,14 @@ impl NexusMetadata {
         payload.insert("file_path".to_string(), self.file_path.clone().into());
 
         if let Some(sprint_number) = self.sprint_number {
-            payload.insert("sprint_number".to_string(), (sprint_number as i64).into());
+            payload.insert("sprint_number".to_string(), i64::from(sprint_number).into());
         }
 
         if let Some(ref file_type) = self.file_type {
             payload.insert("file_type".to_string(), file_type.clone().into());
         }
         if let Some(chunk_index) = self.chunk_index {
-            payload.insert("chunk_index".to_string(), (chunk_index as i64).into());
+            payload.insert("chunk_index".to_string(), i64::from(chunk_index).into());
         }
         if let Some(ref indexed_at) = self.indexed_at {
             payload.insert("indexed_at".to_string(), indexed_at.clone().into());
@@ -150,7 +150,7 @@ impl NexusBrain {
     /// Create a new connection to the Qdrant node
     ///
     /// # Arguments
-    /// * `url` - The gRPC URL of the Qdrant server (e.g., "http://100.x.x.x:6334")
+    /// * `url` - The gRPC URL of the Qdrant server (e.g., "<http://100.x.x.x:6334>")
     ///
     /// # Example
     /// ```no_run
@@ -161,6 +161,7 @@ impl NexusBrain {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(clippy::unused_async)] // Async for consistency with other brain methods
     pub async fn connect(url: &str) -> Result<Self> {
         let client = Qdrant::from_url(url)
             .build()
@@ -169,7 +170,7 @@ impl NexusBrain {
         Ok(Self { client })
     }
 
-    /// Ensure the nexus_brain collection exists with the correct schema
+    /// Ensure the `nexus_brain` collection exists with the correct schema
     pub async fn ensure_collection(&self) -> Result<()> {
         // Check if collection exists
         let exists = self
@@ -282,6 +283,7 @@ impl NexusBrain {
         vector: Vec<f32>,
         metadata: NexusMetadata,
     ) -> Result<()> {
+        #[allow(clippy::cast_possible_truncation)] // VECTOR_SIZE is const 1536, safe
         if vector.len() != VECTOR_SIZE as usize {
             anyhow::bail!(
                 "Vector size mismatch: expected {}, got {}",
@@ -302,14 +304,14 @@ impl NexusBrain {
 
     /// Search for similar vectors in the collection with advanced filtering
     ///
-    /// By default, this restricts results to the current project_id.
+    /// By default, this restricts results to the current `project_id`.
     /// Use `global_search` for cross-project searches.
     ///
     /// # Arguments
     /// * `query_vector` - The query embedding vector
     /// * `limit` - Maximum number of results to return
-    /// * `project_id` - Project ID filter (required unless using global_search)
-    /// * `layers` - Optional layer filter (e.g., Architecture + GlobalStandard)
+    /// * `project_id` - Project ID filter (required unless using `global_search`)
+    /// * `layers` - Optional layer filter (e.g., Architecture + `GlobalStandard`)
     pub async fn search(
         &self,
         query_vector: Vec<f32>,
@@ -361,7 +363,7 @@ impl NexusBrain {
         Ok(search_results)
     }
 
-    /// Global search across all projects (bypass project_id filter)
+    /// Global search across all projects (bypass `project_id` filter)
     ///
     /// Use this when you want to search across all indexed data.
     ///
@@ -410,7 +412,7 @@ impl NexusBrain {
 
     /// Search specifically for architecture-related content
     ///
-    /// Filters by ProjectArchitecture and GlobalStandard layers.
+    /// Filters by `ProjectArchitecture` and `GlobalStandard` layers.
     ///
     /// # Arguments
     /// * `query_vector` - The query embedding vector
@@ -446,7 +448,7 @@ pub struct SearchResult {
 }
 
 impl SearchResult {
-    /// Convert from Qdrant ScoredPoint
+    /// Convert from Qdrant `ScoredPoint`
     fn from_scored_point(point: ScoredPoint) -> Self {
         let payload = point.payload;
 
@@ -469,6 +471,7 @@ impl SearchResult {
         });
 
         let chunk_index = payload.get("chunk_index").and_then(|v| match &v.kind {
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // Chunk index is always positive and small
             Some(qdrant_client::qdrant::value::Kind::IntegerValue(i)) => Some(*i as u32),
             _ => None,
         });
@@ -494,7 +497,7 @@ impl SearchResult {
             "From {}{}: {}",
             self.file_path,
             self.chunk_index
-                .map(|i| format!(" (chunk {})", i))
+                .map(|i| format!(" (chunk {i})"))
                 .unwrap_or_default(),
             self.content
         )
@@ -535,6 +538,7 @@ impl BrainHealth {
 }
 
 /// Format bytes into human-readable format
+#[allow(clippy::cast_precision_loss)] // Acceptable for display formatting
 fn format_bytes(bytes: u64) -> String {
     const KB: u64 = 1024;
     const MB: u64 = KB * 1024;
@@ -547,7 +551,7 @@ fn format_bytes(bytes: u64) -> String {
     } else if bytes >= KB {
         format!("{:.2} KB", bytes as f64 / KB as f64)
     } else {
-        format!("{} bytes", bytes)
+        format!("{bytes} bytes")
     }
 }
 

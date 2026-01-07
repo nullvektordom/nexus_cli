@@ -12,22 +12,21 @@ pub fn execute(project_name: &str) -> Result<(), String> {
     let folder_name = project_path
         .file_name()
         .and_then(|n| n.to_str())
-        .ok_or_else(|| format!("Invalid project path: {}", project_name))?
+        .ok_or_else(|| format!("Invalid project path: {project_name}"))?
         .to_string();
 
     // Check if folder already exists
     if project_path.exists() {
         return Err(format!(
-            "Error: Project folder '{}' already exists. Please choose a different name or remove the existing folder.",
-            project_name
+            "Error: Project folder '{project_name}' already exists. Please choose a different name or remove the existing folder."
         ));
     }
 
     // Create the project folder
     fs::create_dir(&project_path)
-        .map_err(|e| format!("Failed to create project folder '{}': {}", project_name, e))?;
+        .map_err(|e| format!("Failed to create project folder '{project_name}': {e}"))?;
 
-    println!("✓ Created project folder: {}", folder_name);
+    println!("✓ Created project folder: {folder_name}");
 
     // Copy template files
     let template_source = Path::new("templates/project");
@@ -43,7 +42,7 @@ pub fn execute(project_name: &str) -> Result<(), String> {
     copy_dir_recursive(template_source, &project_path).map_err(|e| {
         // Clean up the created folder on error
         let _ = fs::remove_dir_all(&project_path);
-        format!("Failed to copy template files: {}", e)
+        format!("Failed to copy template files: {e}")
     })?;
 
     println!("✓ Copied template files");
@@ -51,7 +50,7 @@ pub fn execute(project_name: &str) -> Result<(), String> {
     // Create nexus.toml configuration
     let absolute_path = project_path
         .canonicalize()
-        .map_err(|e| format!("Failed to resolve absolute path: {}", e))?;
+        .map_err(|e| format!("Failed to resolve absolute path: {e}"))?;
 
     let config = NexusConfig::new(
         folder_name.clone(),
@@ -60,14 +59,14 @@ pub fn execute(project_name: &str) -> Result<(), String> {
 
     let config_toml = config
         .to_toml()
-        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
 
     let config_path = project_path.join("nexus.toml");
     fs::write(&config_path, config_toml)
-        .map_err(|e| format!("Failed to write nexus.toml: {}", e))?;
+        .map_err(|e| format!("Failed to write nexus.toml: {e}"))?;
 
     println!("✓ Created nexus.toml");
-    println!("\n✅ Project '{}' initialized successfully!", folder_name);
+    println!("\n✅ Project '{folder_name}' initialized successfully!");
     println!("   Location: {}", absolute_path.display());
     println!("\nNext steps:");
     println!("   1. cd {}", absolute_path.display());

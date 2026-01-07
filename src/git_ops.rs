@@ -31,13 +31,12 @@ pub fn create_sprint_branch(repo_path: &Path, sprint_number: u32, sprint_name: &
     ensure_clean_working_directory(&repo)?;
 
     // Generate branch name
-    let branch_name = format!("sprint-{}-{}", sprint_number, sprint_name);
+    let branch_name = format!("sprint-{sprint_number}-{sprint_name}");
 
     // Check if branch already exists
     if branch_exists(&repo, &branch_name)? {
         bail!(
-            "Branch '{}' already exists. Please delete it first or use a different sprint.",
-            branch_name
+            "Branch '{branch_name}' already exists. Please delete it first or use a different sprint."
         );
     }
 
@@ -49,7 +48,7 @@ pub fn create_sprint_branch(repo_path: &Path, sprint_number: u32, sprint_name: &
 
     // Create new branch
     repo.branch(&branch_name, &head_commit, false)
-        .with_context(|| format!("Failed to create branch '{}'", branch_name))?;
+        .with_context(|| format!("Failed to create branch '{branch_name}'"))?;
 
     // Checkout the new branch
     checkout_branch(&repo, &branch_name)?;
@@ -94,7 +93,7 @@ fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
     // Find the branch
     let branch = repo
         .find_branch(branch_name, BranchType::Local)
-        .with_context(|| format!("Failed to find branch '{}'", branch_name))?;
+        .with_context(|| format!("Failed to find branch '{branch_name}'"))?;
 
     // Get the reference
     let branch_ref = branch
@@ -104,7 +103,7 @@ fn checkout_branch(repo: &Repository, branch_name: &str) -> Result<()> {
 
     // Set HEAD to the branch
     repo.set_head(branch_ref)
-        .with_context(|| format!("Failed to set HEAD to '{}'", branch_name))?;
+        .with_context(|| format!("Failed to set HEAD to '{branch_name}'"))?;
 
     // Checkout the files
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force()))

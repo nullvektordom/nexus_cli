@@ -71,7 +71,7 @@ pub fn scaffold_sprint_folder(planning_path: &Path, sprint_data: &SprintData) ->
 /// Create Tasks.md with extracted task list
 fn create_tasks_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result<()> {
     let tasks_content = format!(
-        r#"# Sprint {} Tasks: {}
+        r"# Sprint {} Tasks: {}
 
 ## Task List
 {}
@@ -83,7 +83,7 @@ fn create_tasks_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result<(
 
 ## Blockers
 - (none yet)
-"#,
+",
         sprint_data.number, sprint_data.title, sprint_data.tasks
     );
 
@@ -97,7 +97,7 @@ fn create_tasks_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result<(
 /// Create Sprint-Context.md with boundary rules and scope
 fn create_context_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result<()> {
     let context_content = format!(
-        r#"# Sprint {} Context: {}
+        r"# Sprint {} Context: {}
 
 ## Focus
 {}
@@ -127,7 +127,7 @@ fn create_context_file(sprint_folder: &Path, sprint_data: &SprintData) -> Result
 - Planning docs: `01-PLANNING/`
 - MVP breakdown: `01-PLANNING/05-MVP-Breakdown.md`
 - Tech stack: `01-PLANNING/03-Tech-Stack.md`
-"#,
+",
         sprint_data.number, sprint_data.title, sprint_data.context
     );
 

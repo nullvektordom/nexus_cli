@@ -5,6 +5,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 /// Maximum number of conversation turns to store
@@ -34,6 +35,7 @@ pub struct ConversationHistory {
 
 impl ConversationHistory {
     /// Create a new empty conversation history
+    #[must_use] 
     pub fn new(project_id: String) -> Self {
         Self {
             turns: Vec::new(),
@@ -43,7 +45,7 @@ impl ConversationHistory {
 
     /// Add a new turn to the history
     ///
-    /// Automatically maintains the maximum of MAX_HISTORY_TURNS by removing oldest turns.
+    /// Automatically maintains the maximum of `MAX_HISTORY_TURNS` by removing oldest turns.
     pub fn add_turn(&mut self, user_input: String, assistant_response: Option<String>) {
         let turn = ConversationTurn {
             timestamp: chrono::Utc::now().to_rfc3339(),
@@ -63,6 +65,7 @@ impl ConversationHistory {
     /// Get the conversation context as a formatted string
     ///
     /// This can be included in LLM prompts to provide conversation continuity.
+    #[must_use] 
     pub fn get_context_string(&self) -> String {
         if self.turns.is_empty() {
             return String::new();
@@ -71,8 +74,8 @@ impl ConversationHistory {
         let mut context = String::from("[CONVERSATION HISTORY]\n\n");
 
         for (idx, turn) in self.turns.iter().enumerate() {
-            context.push_str(&format!("--- Turn {} ---\n", idx + 1));
-            context.push_str(&format!("User: {}\n", turn.user_input));
+            let _ = writeln!(context, "--- Turn {} ---", idx + 1);
+            let _ = writeln!(context, "User: {}", turn.user_input);
 
             if let Some(ref response) = turn.assistant_response {
                 // Truncate long responses to first 200 chars
@@ -81,7 +84,7 @@ impl ConversationHistory {
                 } else {
                     response.clone()
                 };
-                context.push_str(&format!("Assistant: {}\n", truncated));
+                let _ = writeln!(context, "Assistant: {truncated}");
             } else {
                 context.push_str("Assistant: [No response]\n");
             }
@@ -100,6 +103,9 @@ impl ConversationHistory {
     ///
     /// # Returns
     /// Loaded history or a new empty history if the file doesn't exist
+    ///
+    /// # Errors
+    /// Returns an error if the file exists but cannot be read or parsed
     pub fn load(obsidian_root: &Path, project_id: &str) -> Result<Self> {
         let history_path = Self::get_history_path(obsidian_root);
 
@@ -124,6 +130,9 @@ impl ConversationHistory {
     ///
     /// # Arguments
     /// * `obsidian_root` - Path to the project's Obsidian root
+    ///
+    /// # Errors
+    /// Returns an error if the file cannot be written
     pub fn save(&self, obsidian_root: &Path) -> Result<()> {
         let history_path = Self::get_history_path(obsidian_root);
 
@@ -150,16 +159,19 @@ impl ConversationHistory {
     }
 
     /// Clear all history
+    #[allow(dead_code)] // Public API for future use
     pub fn clear(&mut self) {
         self.turns.clear();
     }
 
     /// Get the number of turns in history
+    #[must_use] 
     pub fn len(&self) -> usize {
         self.turns.len()
     }
 
     /// Check if history is empty
+    #[must_use] 
     pub fn is_empty(&self) -> bool {
         self.turns.is_empty()
     }
@@ -186,7 +198,7 @@ mod tests {
 
         // Add more than MAX_HISTORY_TURNS
         for i in 0..10 {
-            history.add_turn(format!("Query {}", i), Some(format!("Response {}", i)));
+            history.add_turn(format!("Query {i}"), Some(format!("Response {i}")));
         }
 
         // Should only keep the last MAX_HISTORY_TURNS

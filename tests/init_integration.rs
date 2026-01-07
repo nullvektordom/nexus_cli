@@ -3,7 +3,7 @@ use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
 
-/// Helper to create a command instance for nexus_cli
+/// Helper to create a command instance for `nexus_cli`
 fn nexus_cmd() -> Command {
     Command::cargo_bin("nexus").expect("Failed to find binary")
 }
@@ -40,7 +40,7 @@ fn test_init_creates_project_successfully() {
         "Config should contain [project] section"
     );
     assert!(
-        config_content.contains(&format!("name = \"{}\"", project_name)),
+        config_content.contains(&format!("name = \"{project_name}\"")),
         "Config should contain project name"
     );
     assert!(
@@ -77,7 +77,7 @@ fn test_init_creates_project_successfully() {
 
     for file in expected_files {
         let file_path = project_path.join(file);
-        assert!(file_path.exists(), "Template file {} should exist", file);
+        assert!(file_path.exists(), "Template file {file} should exist");
     }
 
     // Verify subdirectories are copied
@@ -165,7 +165,6 @@ fn test_init_creates_absolute_path_in_config() {
     // Verify it's an absolute path (starts with / on Unix)
     assert!(
         obsidian_path_line.contains('/'),
-        "obsidian_path should be absolute: {}",
-        obsidian_path_line
+        "obsidian_path should be absolute: {obsidian_path_line}"
     );
 }

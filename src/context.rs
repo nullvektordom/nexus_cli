@@ -18,6 +18,7 @@ pub struct ArchitectureContext {
 
 /// Sprint context retrieved from Obsidian files
 #[derive(Debug, Clone)]
+#[allow(clippy::struct_field_names)] // sprint_context is descriptive in this domain
 pub struct SprintContext {
     pub sprint_id: String,
     pub tasks: String,
@@ -84,8 +85,9 @@ impl ContextTemplate {
         // Architecture context
         if !self.architecture_snippets.is_empty() {
             output.push_str("[SYSTEM ARCHITECTURE RULES]\n");
+            use std::fmt::Write;
             for (idx, snippet) in self.architecture_snippets.iter().enumerate() {
-                output.push_str(&format!("\n--- Architecture Reference {} ---\n", idx + 1));
+                let _ = writeln!(output, "\n--- Architecture Reference {} ---", idx + 1);
                 output.push_str(snippet);
                 output.push('\n');
             }
@@ -95,7 +97,8 @@ impl ContextTemplate {
         // Sprint context
         if let Some(ref sprint_id) = self.sprint_id {
             output.push_str("[CURRENT SPRINT STATE]\n");
-            output.push_str(&format!("Sprint: {}\n\n", sprint_id));
+            use std::fmt::Write;
+            let _ = writeln!(output, "Sprint: {sprint_id}\n");
 
             if let Some(ref tasks) = self.unfinished_tasks {
                 output.push_str("Unfinished Tasks:\n");
@@ -132,7 +135,7 @@ pub const RELEVANCE_THRESHOLD: f32 = 0.75;
 /// * `config` - Project configuration
 ///
 /// # Returns
-/// ActiveContext containing architecture and sprint information
+/// `ActiveContext` containing architecture and sprint information
 pub async fn get_active_context(
     user_query: &str,
     project_id: &str,
@@ -166,7 +169,7 @@ pub async fn get_active_context(
     let mut architecture = architecture_result
         .context("Architecture retrieval task panicked")?
         .unwrap_or_else(|e| {
-            eprintln!("Warning: Failed to retrieve architecture context: {}", e);
+            eprintln!("Warning: Failed to retrieve architecture context: {e}");
             ArchitectureContext {
                 snippets: Vec::new(),
             }
@@ -312,7 +315,7 @@ mod tests {
 
     #[test]
     fn test_extract_unfinished_tasks() {
-        let content = r#"
+        let content = r"
 # Sprint Tasks
 
 - [x] Completed task
@@ -320,7 +323,7 @@ mod tests {
 - [ ] Unfinished task 2
 * [x] Another completed
 * [ ] Unfinished task 3
-        "#;
+        ";
 
         let result = extract_unfinished_tasks(content);
 
