@@ -14,6 +14,7 @@ Nexus CLI enforces planning discipline through a gated workflow:
 
 - **Structured Planning**: Template-based planning workflow with enforced completion
 - **Gate Validation**: Heuristic-based validation ensures planning quality
+- **Ad-Hoc Task Mode**: Lightweight workflow for bug fixes and small features
 - **AI Integration**: Generate CLAUDE.md for AI-assisted development
 - **Git Integration**: Automatic repository initialization and initial commit
 - **Sprint Management**: Create sprint branches with scoped task lists and context
@@ -243,6 +244,26 @@ current = "sprint-3"
 status = "approved"  # Change from "in_progress"
 ```
 
+### 6. Ad-Hoc Task Mode
+
+For smaller tasks like bug fixes or minor features, use the ad-hoc mode:
+
+```bash
+# Initialize an ad-hoc task
+nexus init my-bug-fix --mode adhoc
+
+# Start the task (runs gate validation)
+nexus task-start .
+
+# Mark task as completed (validates checklist)
+nexus task-done .
+```
+
+Ad-hoc mode uses a simplified planning structure:
+- `Task-Capture.md`: Problem statement and context
+- `Task-Approach.md`: Analysis and proposed solution
+- `Task-Validation.md`: Implementation checklist
+
 ### Idempotency
 
 Running `unlock` multiple times is safe:
@@ -308,7 +329,7 @@ cargo test --test sprint_integration
 
 ## Architecture
 
-- `src/commands/` - Command implementations (init, gate, unlock, sprint)
+- `src/commands/` - Command implementations (init, gate, unlock, sprint, task)
 - `src/config.rs` - Configuration structure and loading
 - `src/git_ops.rs` - Git branch creation and management
 - `src/heuristics.rs` - Gate validation rules

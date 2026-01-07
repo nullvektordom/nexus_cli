@@ -1166,3 +1166,60 @@ Some random text here.
         assert!(sprint.context.contains("Exit criteria"));
     }
 }
+
+/// Update the dashboard with planning completion timestamp
+pub fn update_dashboard_planning_complete(dashboard_path: &Path) -> Result<()> {
+    let content = fs::read_to_string(dashboard_path)
+        .with_context(|| format!("Failed to read dashboard: {}", dashboard_path.display()))?;
+
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
+    let new_content = content.replace(
+        "**Planning completed:** [auto-filled by task start]",
+        &format!("**Planning completed:** {}", timestamp),
+    );
+
+    fs::write(dashboard_path, new_content)
+        .with_context(|| format!("Failed to write dashboard: {}", dashboard_path.display()))?;
+
+    Ok(())
+}
+
+/// Update the dashboard with task completion timestamp
+pub fn update_dashboard_execution_complete(dashboard_path: &Path) -> Result<()> {
+    let content = fs::read_to_string(dashboard_path)
+        .with_context(|| format!("Failed to read dashboard: {}", dashboard_path.display()))?;
+
+    let timestamp = chrono::Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
+    let new_content = content.replace(
+        "**Task completed:** [auto-filled by task done]",
+        &format!("**Task completed:** {}", timestamp),
+    );
+
+    fs::write(dashboard_path, new_content)
+        .with_context(|| format!("Failed to write dashboard: {}", dashboard_path.display()))?;
+
+    Ok(())
+}
+
+/// Validate that all checkboxes in a document are checked
+pub fn validate_all_checkboxes_checked(file_path: &Path) -> Result<bool> {
+    let content = fs::read_to_string(file_path)
+        .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
+
+    let mut options = Options::empty();
+    options.insert(Options::ENABLE_TASKLISTS);
+    let parser = Parser::new_ext(&content, options);
+
+    let mut has_unchecked = false;
+
+    for event in parser {
+        if let Event::TaskListMarker(checked) = event {
+            if !checked {
+                has_unchecked = true;
+                break;
+            }
+        }
+    }
+
+    Ok(!has_unchecked)
+}

@@ -31,6 +31,9 @@ enum Commands {
     Init {
         /// Name of the project to create
         project_name: String,
+        /// Mode: "sprint" (default) or "adhoc"
+        #[arg(long, default_value = "sprint")]
+        mode: String,
     },
     /// Check if planning documents are complete and ready
     Gate {
@@ -51,14 +54,24 @@ enum Commands {
     },
     /// Start an interactive shell (REPL)
     Shell,
+    /// Start working on an ad-hoc task
+    TaskStart {
+        /// Path to the project directory
+        project_path: PathBuf,
+    },
+    /// Mark an ad-hoc task as completed
+    TaskDone {
+        /// Path to the project directory
+        project_path: PathBuf,
+    },
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { project_name } => {
-            if let Err(e) = commands::init::execute(&project_name) {
+        Commands::Init { project_name, mode } => {
+            if let Err(e) = commands::init::execute(&project_name, &mode) {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
@@ -86,6 +99,18 @@ fn main() {
         }
         Commands::Shell => {
             if let Err(e) = commands::shell::execute() {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::TaskStart { project_path } => {
+            if let Err(e) = commands::task::execute_start(&project_path) {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::TaskDone { project_path } => {
+            if let Err(e) = commands::task::execute_done(&project_path) {
                 eprintln!("{e}");
                 std::process::exit(1);
             }
