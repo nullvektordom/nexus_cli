@@ -4,7 +4,6 @@
 //! This eliminates the need for external API calls and runs efficiently on Fedora machines.
 
 use anyhow::{Context, Result};
-use ndarray::Array2;
 use ort::session::Session;
 use tokenizers::Tokenizer;
 
@@ -81,31 +80,16 @@ impl EmbeddingGenerator {
         // Token type IDs (all zeros for single sentence)
         let token_type_ids = vec![0u32; input_ids.len()];
 
-        // Convert to ndarray format
-        let input_ids_array = Array2::from_shape_vec(
-            (1, input_ids.len()),
-            input_ids.iter().map(|&id| i64::from(id)).collect(),
-        )
-        .context("Failed to create input_ids array")?;
+        let input_ids_vec: Vec<i64> = input_ids.iter().map(|&id| i64::from(id)).collect();
+        let attention_mask_vec: Vec<i64> = attention_mask.iter().map(|&mask| i64::from(mask)).collect();
+        let token_type_ids_vec: Vec<i64> = token_type_ids.iter().map(|&id| i64::from(id)).collect();
 
-        let attention_mask_array = Array2::from_shape_vec(
-            (1, attention_mask.len()),
-            attention_mask.iter().map(|&mask| i64::from(mask)).collect(),
-        )
-        .context("Failed to create attention_mask array")?;
-
-        let token_type_ids_array = Array2::from_shape_vec(
-            (1, token_type_ids.len()),
-            token_type_ids.iter().map(|&id| i64::from(id)).collect(),
-        )
-        .context("Failed to create token_type_ids array")?;
-
-        // Convert to ORT Values
-        let input_ids_value = ort::value::Value::from_array(input_ids_array)
+        // Convert to ORT Values using (shape, data) tuple which implements OwnedTensorArrayData
+        let input_ids_value = ort::value::Value::from_array((vec![1, input_ids.len()], input_ids_vec))
             .context("Failed to create input_ids value")?;
-        let attention_mask_value = ort::value::Value::from_array(attention_mask_array)
+        let attention_mask_value = ort::value::Value::from_array((vec![1, attention_mask.len()], attention_mask_vec))
             .context("Failed to create attention_mask value")?;
-        let token_type_ids_value = ort::value::Value::from_array(token_type_ids_array)
+        let token_type_ids_value = ort::value::Value::from_array((vec![1, token_type_ids.len()], token_type_ids_vec))
             .context("Failed to create token_type_ids value")?;
 
         // Run inference

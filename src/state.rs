@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
 /// Default Obsidian vault root directory
-pub const DEFAULT_OBSIDIAN_ROOT: &str = "/home/nullvektor/obsidian/execution_helper/Projects";
+pub const DEFAULT_OBSIDIAN_ROOT: &str = "/home/nullvektor/obsidian/projects";
 
 /// Default repos root directory
 pub const DEFAULT_REPOS_ROOT: &str = "/home/nullvektor/repos";
@@ -237,7 +237,7 @@ mod tests {
         assert_eq!(
             state.get_active_obsidian_path(),
             Some(PathBuf::from(
-                "/home/nullvektor/obsidian/execution_helper/Projects/nexus_cli"
+                "/home/nullvektor/obsidian/projects/nexus_cli"
             ))
         );
     }

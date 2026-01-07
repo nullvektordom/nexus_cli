@@ -27,13 +27,15 @@ pub fn execute() -> Result<()> {
     state.save(&state_file)?;
 
     // Initialize embeddings (local ONNX model for semantic search)
-    if let Err(e) = crate::embeddings::initialize_embeddings("models/model.onnx", "models/tokenizer.json") {
+    let (model_path, tokenizer_path) = find_model_paths();
+    if let Err(e) = crate::embeddings::initialize_embeddings(&model_path, &tokenizer_path) {
         eprintln!("{}", "Warning: Failed to initialize embeddings:".yellow());
         eprintln!("  {e}");
         eprintln!("{}", "  Semantic search will be degraded. Planning Catalyst features will use zero vectors.".yellow());
         eprintln!();
     } else {
-        eprintln!("{}", "✓ Embeddings initialized (all-MiniLM-L6-v2 via ONNX)".green());
+        let msg = format!("✓ Embeddings initialized ({})", model_path);
+        eprintln!("{}", msg.green());
         eprintln!();
     }
 
@@ -67,9 +69,17 @@ pub fn execute() -> Result<()> {
             } else {
                 ""
             };
+            
+            // Check if adhoc mode
+            let mode_indicator = if is_active_project_adhoc(&state) {
+                "📌"
+            } else {
+                "🏃"
+            };
+
             format!(
                 "{} ",
-                format!("nexus:{project}{watch_indicator}{context_indicator}❯")
+                format!("nexus:{project}{mode_indicator}{watch_indicator}{context_indicator}❯")
                     .cyan()
                     .bold()
             )
@@ -221,6 +231,9 @@ fn execute_command(
         "gate" => execute_gate(state, last_gate_error),
         "unlock" => execute_unlock(state),
         "sprint" => execute_sprint(state, args),
+        "task" => execute_task_command(state, args),
+        "start" => execute_task_command(state, &["start"]),
+        "done" => execute_task_command(state, &["done"]),
         "status" => execute_status(state),
         "catalyst" => execute_catalyst(state, args),
         "watch" => execute_watch(state, watcher, watcher_enabled),
@@ -279,7 +292,12 @@ fn print_help() {
         "  {}       Generate CLAUDE.md from planning documents",
         "unlock".cyan()
     );
-    println!("  {}  <N>   Create/switch to sprint N", "sprint".cyan());
+    println!(
+        "  {}  <N>   Create/switch to sprint N", "sprint".cyan());
+    println!(
+        "  {}  <start|done> Manage ad-hoc tasks",
+        "task".cyan()
+    );
     println!(
         "  {}       Check Brain health and memory usage",
         "status".cyan()
@@ -724,7 +742,7 @@ fn execute_status(state: &NexusState) -> Result<()> {
     );
     println!(
         "{}",
-        "║          🧠 Brain Status: ONLINE ✓             ║".green()
+        "║          🧠 Brain Status: ONLINE ✓               ║".green()
     );
     println!(
         "{}",
@@ -1305,4 +1323,84 @@ fn generate_query_embedding(_query: &str) -> Vec<f32> {
     // In production, use an actual embedding model
     // For now, return a dummy vector
     vec![0.0; 1536]
+}
+
+/// Find the paths to the ONNX model and tokenizer
+fn find_model_paths() -> (String, String) {
+    let model_name = "model.onnx";
+    let tokenizer_name = "tokenizer.json";
+
+    // List of candidate directories to check
+    let candidates = [
+        "models/models",
+        "models",
+        "/home/nullvektor/repos/nexus_cli/models/models",
+    ];
+
+    for dir in candidates {
+        let model_path = std::path::Path::new(dir).join(model_name);
+        let tokenizer_path = std::path::Path::new(dir).join(tokenizer_name);
+
+        if model_path.exists() && tokenizer_path.exists() {
+            return (
+                model_path.to_string_lossy().to_string(),
+                tokenizer_path.to_string_lossy().to_string(),
+            );
+        }
+    }
+
+    // Default to relative paths if not found (will fail with clear error)
+    ("models/models/model.onnx".to_string(), "models/models/tokenizer.json".to_string())
+}
+
+/// Execute task-related commands (start, done)
+///
+/// # Arguments
+/// * `state` - Current shell session state
+/// * `args` - Command arguments (e.g., ["start"] or ["done"])
+fn execute_task_command(state: &NexusState, args: &[&str]) -> Result<()> {
+    let project_path = state
+        .get_active_repo_path()
+        .ok_or_else(|| anyhow::anyhow!("No active project. Use 'use <project>' first."))?;
+
+    if args.is_empty() {
+        anyhow::bail!("Usage: task <start|done>");
+    }
+
+    match args[0].to_lowercase().as_str() {
+        "start" => crate::commands::task::execute_start(&project_path),
+        "done" => crate::commands::task::execute_done(&project_path),
+        _ => anyhow::bail!("Unknown task command: '{}'. Use 'start' or 'done'.", args[0]),
+    }
+}
+
+/// Check if the active project is in adhoc mode
+///
+/// # Arguments
+/// * `state` - Current shell session state
+///
+/// # Returns
+/// * `true` if the active project is in adhoc mode, `false` otherwise
+fn is_active_project_adhoc(state: &NexusState) -> bool {
+    let repo_path = match state.get_active_repo_path() {
+        Some(path) => path,
+        None => return false,
+    };
+
+    let config_path = repo_path.join("nexus.toml");
+    if !config_path.exists() {
+        return false;
+    }
+
+    let config_content = match std::fs::read_to_string(&config_path) {
+        Ok(content) => content,
+        Err(_) => return false,
+    };
+
+    let config: NexusConfig = match toml::from_str(&config_content) {
+        Ok(config) => config,
+        Err(_) => return false,
+    };
+
+    config.is_adhoc_mode()
 }
