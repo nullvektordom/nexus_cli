@@ -18,7 +18,7 @@ strict_mode = true
 is_unlocked = false
 
 [state.active_sprint]
-current = "sprint-3"
+current = "sprint-7-adhoc-task-feature"
 status = "approved"
 
 [templates]

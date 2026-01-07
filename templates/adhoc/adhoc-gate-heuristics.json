@@ -1,0 +1,20 @@
+{
+  "min_section_length": 30,
+  "illegal_strings": ["TODO", "TBD", "[fill", "placeholder", "XXX"],
+  "required_headers": [],
+  "strict_mode": true,
+  "adhoc_rules": {
+    "task_capture": {
+      "required_headers": ["Source", "Problem Statement", "Context", "Definition of Done"],
+      "min_total_words": 100
+    },
+    "task_approach": {
+      "required_headers": ["Analysis", "Proposed Solution", "Risks", "Files to Modify"],
+      "min_total_words": 150
+    },
+    "task_validation": {
+      "required_headers": ["Pre-Work", "Implementation", "Verification"],
+      "min_checkboxes_per_section": 3
+    }
+  }
+}
