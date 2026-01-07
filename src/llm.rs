@@ -60,7 +60,10 @@ impl LlmClient {
         match self.provider {
             LlmProvider::OpenRouter => self.complete_openrouter(prompt).await,
             LlmProvider::Claude => self.complete_claude(prompt).await,
-            LlmProvider::Gemini => self.complete_gemini(prompt).await,
+            LlmProvider::Gemini => {
+                let (text, _) = self.complete_gemini_with_system("", prompt).await?;
+                Ok(text)
+            }
         }
     }
 
@@ -87,9 +90,9 @@ impl LlmClient {
                     .await
             }
             LlmProvider::Gemini => {
-                // Gemini doesn't have system messages, so prepend to user message
-                let combined = format!("{system_prompt}\n\n{user_prompt}");
-                self.complete_gemini(&combined).await
+                let (text, _) = self.complete_gemini_with_system(system_prompt, user_prompt)
+                    .await?;
+                Ok(text)
             }
         }
     }
@@ -386,21 +389,47 @@ impl LlmClient {
             .ok_or_else(|| anyhow::anyhow!("No content in Claude response"))
     }
 
-    /// Send a prompt to Gemini API
-    async fn complete_gemini(&self, prompt: &str) -> Result<String> {
+    /// Send a prompt with system message to Gemini API
+    pub async fn complete_gemini_full(
+        &self,
+        system_prompt: &str,
+        history: &[(String, String)],
+        previous_thought_signature: Option<String>,
+        user_prompt: &str,
+    ) -> Result<(String, Option<String>)> {
         #[derive(Serialize)]
         struct GeminiRequest {
             contents: Vec<GeminiContent>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            system_instruction: Option<GeminiContent>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            generation_config: Option<GeminiGenerationConfig>,
+        }
+
+        #[derive(Serialize)]
+        struct GeminiGenerationConfig {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            thinking_config: Option<GeminiThinkingConfig>,
+        }
+
+        #[derive(Serialize)]
+        struct GeminiThinkingConfig {
+            include_thoughts: bool,
+            thinking_level: String,
         }
 
         #[derive(Serialize)]
         struct GeminiContent {
             parts: Vec<GeminiPart>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            role: Option<String>,
         }
 
-        #[derive(Serialize)]
+        #[derive(Serialize, Deserialize)]
         struct GeminiPart {
             text: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            thought_signature: Option<String>,
         }
 
         #[derive(Deserialize)]
@@ -415,20 +444,54 @@ impl LlmClient {
 
         #[derive(Deserialize)]
         struct GeminiResponseContent {
-            parts: Vec<GeminiResponsePart>,
+            parts: Vec<GeminiPart>,
         }
 
-        #[derive(Deserialize)]
-        struct GeminiResponsePart {
-            text: String,
+        let mut contents = Vec::new();
+        for (role, text) in history {
+            contents.push(GeminiContent {
+                parts: vec![GeminiPart {
+                    text: text.clone(),
+                    thought_signature: None,
+                }],
+                role: Some(role.clone()),
+            });
         }
+
+        // If we have a previous thought signature, it should be in the last model message
+        if let Some(sig) = previous_thought_signature
+            && let Some(last_model) = contents.iter_mut().rev().find(|c| c.role.as_deref() == Some("model"))
+            && let Some(part) = last_model.parts.first_mut() {
+                part.thought_signature = Some(sig);
+        }
+
+        contents.push(GeminiContent {
+            parts: vec![GeminiPart {
+                text: user_prompt.to_string(),
+                thought_signature: None,
+            }],
+            role: Some("user".to_string()),
+        });
 
         let request = GeminiRequest {
-            contents: vec![GeminiContent {
-                parts: vec![GeminiPart {
-                    text: prompt.to_string(),
-                }],
-            }],
+            contents,
+            system_instruction: if system_prompt.is_empty() {
+                None
+            } else {
+                Some(GeminiContent {
+                    parts: vec![GeminiPart {
+                        text: system_prompt.to_string(),
+                        thought_signature: None,
+                    }],
+                    role: None,
+                })
+            },
+            generation_config: Some(GeminiGenerationConfig {
+                thinking_config: Some(GeminiThinkingConfig {
+                    include_thoughts: true,
+                    thinking_level: "high".to_string(),
+                }),
+            }),
         };
 
         let url = format!(
@@ -459,11 +522,27 @@ impl LlmClient {
             .await
             .context("Failed to parse Gemini API response")?;
 
-        gemini_response
+        let candidate = gemini_response
             .candidates
             .first()
-            .and_then(|c| c.content.parts.first())
+            .ok_or_else(|| anyhow::anyhow!("No candidates in Gemini response"))?;
+
+        let text = candidate.content.parts.first()
             .map(|p| p.text.clone())
-            .ok_or_else(|| anyhow::anyhow!("No content in Gemini response"))
+            .ok_or_else(|| anyhow::anyhow!("No text in Gemini response"))?;
+
+        let thought_signature = candidate.content.parts.iter()
+            .find_map(|p| p.thought_signature.clone());
+
+        Ok((text, thought_signature))
+    }
+
+    /// Send a prompt with system message to Gemini API
+    async fn complete_gemini_with_system(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<(String, Option<String>)> {
+        self.complete_gemini_full(system_prompt, &[], None, user_prompt).await
     }
 }

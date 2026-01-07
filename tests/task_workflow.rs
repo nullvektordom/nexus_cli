@@ -1,4 +1,4 @@
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
@@ -13,7 +13,7 @@ fn test_adhoc_task_workflow() {
     fs::create_dir(&vault_path).unwrap();
 
     // 1. Init adhoc project
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("init")
         .arg("test_task")
         .arg("--mode")
@@ -54,7 +54,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
     fs::create_dir_all(&planning_dir).unwrap();
 
     // 2. Try to start without planning (should fail)
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("task-start").arg(&project_path);
     cmd.assert().failure();
 
@@ -80,7 +80,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
     ).unwrap();
 
     // 4. Start task (should pass now)
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("task-start").arg(&project_path);
     cmd.assert()
         .success()
@@ -97,7 +97,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
         "## Pre-Work\n\n- [ ] Step 1\n- [x] Step 2\n- [x] Step 3\n\n## Implementation\n\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n\n## Verification\n\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n"
     ).unwrap();
 
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("task-done").arg(&project_path);
     cmd.assert().failure();
 
@@ -107,7 +107,7 @@ adhoc_dashboard = "00-ADHOC-TASK.md"
         "## Pre-Work\n\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n\n## Implementation\n\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n\n## Verification\n\n- [x] Step 1\n- [x] Step 2\n- [x] Step 3\n"
     ).unwrap();
 
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("task-done").arg(&project_path);
     cmd.assert()
         .success()

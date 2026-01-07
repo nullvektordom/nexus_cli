@@ -240,6 +240,7 @@ fn execute_command(
         "unwatch" => execute_unwatch(watcher, watcher_enabled),
         "why" => execute_why(state, last_gate_error),
         "context" => execute_context(args, context_enabled),
+        "decision" => execute_decision(args, state),
         "clear" | "cls" => {
             print!("\x1B[2J\x1B[1;1H");
             Ok(())
@@ -353,7 +354,7 @@ fn print_help() {
     println!();
     println!(
         "{}",
-        "  🧠 Natural language queries use DeepSeek R1 (deepseek/deepseek-r1) by default".dimmed()
+        "  🧠 Natural language queries use Gemini 3 Pro (gemini-3-pro) by default".dimmed()
     );
     println!(
         "{}",
@@ -522,11 +523,11 @@ fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
         anyhow::anyhow!(
             "LLM not configured. Add [llm] section to nexus.toml:\n\n\
             [llm]\n\
-            provider = \"openrouter\"\n\
-            model = \"deepseek/deepseek-r1\"\n\
+            provider = \"gemini\"\n\
+            model = \"gemini-3-pro\"\n\
             enabled = true\n\n\
             Set your API key:\n\
-            export OPENROUTER_API_KEY=\"your-key\""
+            export GOGGLE_AI_STUDIO_API_KEY=\"your-key\""
         )
     })?;
 
@@ -550,12 +551,12 @@ fn execute_catalyst(state: &NexusState, args: &[&str]) -> Result<()> {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))
             })?,
-        "gemini" | "google" => std::env::var("GOOGLE_API_KEY")
+        "gemini" | "google" => std::env::var("GOGGLE_AI_STUDIO_API_KEY")
             .or_else(|_| {
                 llm_config
                     .api_key
                     .clone()
-                    .ok_or_else(|| anyhow::anyhow!("GOOGLE_API_KEY not set"))
+                    .ok_or_else(|| anyhow::anyhow!("GOGGLE_AI_STUDIO_API_KEY not set"))
             })?,
         _ => anyhow::bail!("Unknown LLM provider: {}", llm_config.provider),
     };
@@ -660,8 +661,8 @@ fn print_catalyst_help() {
     println!("{}", "Prerequisites:".bold());
     println!("  • Complete 01-Problem-and-Vision.md manually");
     println!("  • Configure LLM in nexus.toml ([llm] section)");
-    println!("  • Set OPENROUTER_API_KEY environment variable");
-    println!("  • Recommended: Use reasoning models like deepseek/deepseek-r1");
+    println!("  • Set GOGGLE_AI_STUDIO_API_KEY environment variable");
+    println!("  • Recommended: Use reasoning models like gemini-3-pro");
     println!();
     println!("{}", "Example workflows:".dimmed());
     println!();
@@ -1149,11 +1150,33 @@ fn execute_context(args: &[&str], context_enabled: &Arc<Mutex<bool>>) -> Result<
     Ok(())
 }
 
+/// Execute the decision command - store an architectural decision in Qdrant
+fn execute_decision(args: &[&str], _state: &NexusState) -> Result<()> {
+    use crate::memory::NexusMemory;
+
+    if args.is_empty() {
+        anyhow::bail!("Usage: decision <text>");
+    }
+
+    let text = args.join(" ");
+    println!("{}", "💾 Storing architectural decision...".cyan());
+
+    tokio::runtime::Runtime::new()?.block_on(async {
+        let memory = NexusMemory::connect().await?;
+        memory.store_decision(&text).await
+    })?;
+
+    println!("{} Decision stored in nexus_ledger", "✓".green().bold());
+    Ok(())
+}
+
 /// Execute an LLM query with context injection and conversation history
 fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
     use crate::context::{get_active_context, ContextTemplate, RELEVANCE_THRESHOLD};
     use crate::history::ConversationHistory;
     use crate::llm::{LlmClient, LlmProvider};
+    use crate::session::NexusSession;
+    use crate::memory::NexusMemory;
 
     let project_id = state
         .active_project_id
@@ -1171,6 +1194,15 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
     // Load conversation history
     let mut history = ConversationHistory::load(&obsidian_path, project_id)?;
 
+    // Load session for Gemini thought rehydration
+    let session_path = repo_path.join(".nexus_session.json");
+    let mut session = NexusSession::load(&session_path)?;
+
+    // Connect to architectural memory
+    let memory = tokio::runtime::Runtime::new()?.block_on(async {
+        NexusMemory::connect().await
+    })?;
+
     // Load project config
     let config_path = repo_path.join("nexus.toml");
     if !config_path.exists() {
@@ -1187,13 +1219,13 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         anyhow::anyhow!(
             "LLM not configured. Add [llm] section to nexus.toml:\n\n\
             [llm]\n\
-            provider = \"openrouter\"  # Default (cost-effective), or \"claude\"/\"gemini\"\n\
-            model = \"deepseek/deepseek-r1\"  # Default model\n\
+            provider = \"gemini\"  # Default (high reasoning), or \"claude\"/\"openrouter\"\n\
+            model = \"gemini-3-pro\"  # Default model\n\
             enabled = true\n\n\
             Set your API key via environment variable:\n\
-            export OPENROUTER_API_KEY=\"your-key\"  # for OpenRouter (default)\n\
+            export GOGGLE_AI_STUDIO_API_KEY=\"your-key\"  # for Gemini (default)\n\
             export ANTHROPIC_API_KEY=\"your-key\"   # for Claude\n\
-            export GOOGLE_API_KEY=\"your-key\"      # for Gemini"
+            export OPENROUTER_API_KEY=\"your-key\"  # for OpenRouter"
         )
     })?;
 
@@ -1217,12 +1249,12 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("ANTHROPIC_API_KEY not set"))
             })?,
-        "gemini" | "google" => std::env::var("GOOGLE_API_KEY")
+        "gemini" | "google" => std::env::var("GOGGLE_AI_STUDIO_API_KEY")
             .or_else(|_| {
                 llm_config
                     .api_key
                     .clone()
-                    .ok_or_else(|| anyhow::anyhow!("GOOGLE_API_KEY not set"))
+                    .ok_or_else(|| anyhow::anyhow!("GOGGLE_AI_STUDIO_API_KEY not set"))
             })?,
         _ => anyhow::bail!("Unknown LLM provider: {}", llm_config.provider),
     };
@@ -1244,6 +1276,9 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
     // Run async context retrieval and LLM call
     let runtime = tokio::runtime::Runtime::new()?;
     let result = runtime.block_on(async {
+        // Retrieve architectural decisions
+        let previous_decisions = memory.retrieve_context(input).await.unwrap_or_default();
+        
         // Get active context (architecture + sprint)
         let context = if let Some(ref url) = qdrant_url {
             get_active_context(input, project_id, url, &obsidian_path, &config).await?
@@ -1282,6 +1317,16 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         let template = ContextTemplate::new(context, input.to_string());
         let mut prompt = template.render();
 
+        // Inject architectural decisions
+        if !previous_decisions.is_empty() {
+            let decisions_block = format!(
+                "\n### PREVIOUS ARCHITECTURAL DECISIONS\n{}\n",
+                previous_decisions.join("\n")
+            );
+            prompt = format!("{decisions_block}{prompt}");
+            println!("  {} Included {} previous architectural decisions", "✓".green(), previous_decisions.len());
+        }
+
         // Prepend conversation history if available
         if !history.is_empty() {
             let history_context = history.get_context_string();
@@ -1290,20 +1335,37 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         }
 
         // Create LLM client
-        let provider = LlmProvider::from_str(&llm_config.provider)
+        let provider_enum = LlmProvider::from_str(&llm_config.provider)
             .ok_or_else(|| anyhow::anyhow!("Invalid LLM provider: {}", llm_config.provider))?;
 
-        let client = LlmClient::new(provider, api_key, llm_config.model.clone());
+        let client = LlmClient::new(provider_enum.clone(), api_key, llm_config.model.clone());
 
         println!();
         println!("{}", "🤖 Querying LLM...".cyan());
         println!();
 
         // Send to LLM
-        let response = client.complete(&prompt).await?;
+        let (response, thought_signature) = if provider_enum == LlmProvider::Gemini {
+            // Rehydrate session messages
+            let session_messages: Vec<(String, String)> = session.get_last_5_messages()
+                .into_iter()
+                .map(|m| (m.role, m.content))
+                .collect();
+            
+            client.complete_gemini_full(
+                "", // System prompt is already in the main prompt string for now
+                &session_messages,
+                session.last_thought_signature.clone(),
+                &prompt
+            ).await?
+        } else {
+            (client.complete(&prompt).await?, None)
+        };
 
-        Ok::<String, anyhow::Error>(response)
+        Ok::<(String, Option<String>), anyhow::Error>((response, thought_signature))
     })?;
+
+    let (result, thought_signature) = result;
 
     // Print response
     println!("{result}");
@@ -1313,6 +1375,14 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
     history.add_turn(input.to_string(), Some(result.clone()));
     if let Err(e) = history.save(&obsidian_path) {
         eprintln!("Warning: Failed to save conversation history: {e}");
+    }
+
+    // Update and save session
+    session.add_message("user".to_string(), input.to_string());
+    session.add_message("model".to_string(), result.clone());
+    session.last_thought_signature = thought_signature;
+    if let Err(e) = session.save(&session_path) {
+        eprintln!("Warning: Failed to save session: {e}");
     }
 
     Ok(())
