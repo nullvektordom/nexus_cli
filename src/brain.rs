@@ -20,8 +20,8 @@ use std::collections::HashMap;
 /// Collection name for the Nexus brain
 pub const COLLECTION_NAME: &str = "nexus_brain";
 
-/// Vector dimension size (using `OpenAI` ada-002 compatible size)
-pub const VECTOR_SIZE: u64 = 1536;
+/// Vector dimension size (using all-MiniLM-L6-v2 via ONNX)
+pub const VECTOR_SIZE: u64 = 384;
 
 /// Layer categorization for knowledge organization
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -164,6 +164,7 @@ impl NexusBrain {
     #[allow(clippy::unused_async)] // Async for consistency with other brain methods
     pub async fn connect(url: &str) -> Result<Self> {
         let client = Qdrant::from_url(url)
+            .skip_compatibility_check() // Disable version check for Tailscale/gRPC compatibility
             .build()
             .context("Failed to create Qdrant client")?;
 
