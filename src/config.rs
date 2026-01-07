@@ -129,11 +129,11 @@ pub struct LlmConfig {
 }
 
 fn default_provider() -> String {
-    "openrouter".to_string()
+    "gemini".to_string()
 }
 
 fn default_model() -> String {
-    "deepseek/deepseek-r1".to_string()
+    "gemini-3-pro".to_string()
 }
 
 fn default_llm_enabled() -> bool {
@@ -223,7 +223,7 @@ impl NexusConfig {
     pub fn is_adhoc_mode(&self) -> bool {
         self.tasks
             .as_ref()
-            .map_or(false, |t| t.mode == "adhoc")
+            .is_some_and(|t| t.mode == "adhoc")
     }
 
     /// Get the full path to the adhoc planning directory

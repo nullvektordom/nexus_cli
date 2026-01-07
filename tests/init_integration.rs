@@ -1,11 +1,12 @@
 use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
 
 /// Helper to create a command instance for `nexus_cli`
 fn nexus_cmd() -> Command {
-    Command::cargo_bin("nexus").expect("Failed to find binary")
+    cargo_bin_cmd!("nexus")
 }
 
 #[test]
@@ -323,11 +324,10 @@ fn test_init_adhoc_displays_correct_message() {
 
     // Extract obsidian path and cleanup
     let stdout = String::from_utf8_lossy(&output.stdout);
-    if let Some(line) = stdout.lines().find(|l| l.contains("Obsidian vault:")) {
-        if let Some(path) = line.split("Obsidian vault:").nth(1) {
+    if let Some(line) = stdout.lines().find(|l| l.contains("Obsidian vault:"))
+        && let Some(path) = line.split("Obsidian vault:").nth(1) {
             let vault_path = std::path::PathBuf::from(path.trim());
             let _ = fs::remove_dir_all(&vault_path);
-        }
     }
 }
 

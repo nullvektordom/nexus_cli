@@ -1,6 +1,6 @@
 //! Integration tests for Sprint command
 
-use assert_cmd::Command;
+use assert_cmd::cargo::cargo_bin_cmd;
 use predicates::prelude::*;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -140,7 +140,7 @@ fn test_sprint_command_creates_branch_and_folders() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
@@ -232,7 +232,7 @@ fn test_sprint_command_fails_if_previous_not_approved() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
@@ -260,7 +260,7 @@ fn test_sprint_command_succeeds_if_previous_approved() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
@@ -290,7 +290,7 @@ fn test_sprint_command_fails_with_dirty_working_directory() {
     fs::write(project_path.join("dirty.txt"), "uncommitted").unwrap();
 
     // Run sprint command
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("sprint").arg(project_path).arg("4");
 
     cmd.assert()
@@ -317,7 +317,7 @@ fn test_sprint_command_fails_with_invalid_sprint_number() {
     init_test_git_repo(&project_path.to_path_buf());
 
     // Run sprint command with non-existent sprint number
-    let mut cmd = Command::cargo_bin("nexus").unwrap();
+    let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("sprint").arg(project_path).arg("99");
 
     cmd.assert()
