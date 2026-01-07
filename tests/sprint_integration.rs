@@ -17,10 +17,9 @@ fn create_nexus_config(
         format!(
             r#"
 [state.active_sprint]
-current = "{}"
-status = "{}"
-"#,
-            current, status
+current = "{current}"
+status = "{status}"
+"#
         )
     } else {
         String::new()
@@ -30,7 +29,7 @@ status = "{}"
         r#"[project]
 name = "test_project"
 version = "0.1.0"
-obsidian_path = "{}"
+obsidian_path = "{vault_path_str}"
 
 [structure]
 planning_dir = "01-PLANNING"
@@ -43,18 +42,17 @@ strict_mode = true
 
 [state]
 is_unlocked = true
-{}
+{active_sprint_section}
 [templates]
 claude_template = "templates/CLAUDE.md.example"
-"#,
-        vault_path_str, active_sprint_section
+"#
     );
     fs::write(project_path.join("nexus.toml"), &config_content).unwrap();
 }
 
 /// Helper to create MVP breakdown file with test sprints
 fn create_mvp_breakdown(planning_dir: &Path) {
-    let mvp_content = r#"# MVP broken into sprints
+    let mvp_content = r"# MVP broken into sprints
 
 ## Sprint 0: Setup (day 1)
 - [x] Create nexus repo with Cargo.toml
@@ -89,7 +87,7 @@ _Focus: Creating the Tactical Staging Area._
 - [ ] Branching Logic: Use the git2 crate
 - [ ] Obsidian Scaffolding: Create sprint folders
 **Exit criteria:** `nexus sprint X` creates branch and workspace
-"#;
+";
 
     fs::write(planning_dir.join("05-MVP-Breakdown.md"), mvp_content).unwrap();
 }

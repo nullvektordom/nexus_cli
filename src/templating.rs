@@ -2,6 +2,8 @@
 //!
 //! Uses Tera to render CLAUDE.md from extracted planning context.
 
+#![allow(clippy::similar_names)] // context/content are domain-appropriate names
+
 use crate::planning::PlanningContext;
 use anyhow::{Context, Result};
 use std::path::Path;

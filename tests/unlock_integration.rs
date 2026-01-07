@@ -146,7 +146,7 @@ claude_template = "templates/CLAUDE.md.example"
     // Create complete planning docs
     fs::write(
         planning_dir.join("01-Problem-and-Vision.md"),
-        r#"# What is the problem?
+        r"# What is the problem?
 
 ## My problem (personal):
 I need a tool to manage my projects better and stay organized always.
@@ -166,13 +166,13 @@ A CLI tool that enforces planning discipline through gates and validation rules 
 - Not: A project management SaaS
 - Not: An AI-powered tool
 - Not: A replacement for existing tools
-"#,
+",
     )
     .unwrap();
 
     fs::write(
         planning_dir.join("02-Scope-and-Boundaries.md"),
-        r#"# What am I building? (Scope)
+        r"# What am I building? (Scope)
 
 ## MVP (Minimum Viable Product):
 Absolute minimum version that solves core problem:
@@ -188,13 +188,13 @@ Absolute minimum version that solves core problem:
 - Budget: Free/open source
 - Deadline: 3 months
 - Platform: CLI only
-"#,
+",
     )
     .unwrap();
 
     fs::write(
         planning_dir.join("03-Tech-Stack.md"),
-        r#"# Technical choices
+        r"# Technical choices
 
 ## Stack (force yourself to choose NOW):
 - **Frontend:** CLI only
@@ -218,13 +218,13 @@ Rust provides performance and reliability for a CLI tool.
 - IDE: VS Code
 - OS: Linux
 - Device: Desktop
-"#,
+",
     )
     .unwrap();
 
     fs::write(
         planning_dir.join("04-Architecture.md"),
-        r#"# System design
+        r"# System design
 
 ## Folder structure:
 ```
@@ -253,13 +253,13 @@ project/
 - State management: File-based (nexus.toml)
 - Navigation: CLI subcommands
 - Data persistence: Markdown files
-"#,
+",
     )
     .unwrap();
 
     fs::write(
         planning_dir.join("05-MVP-Breakdown.md"),
-        r#"# MVP broken into sprints
+        r"# MVP broken into sprints
 
 ## Sprint 0: Setup (day 1)
 - [x] Create repo
@@ -289,7 +289,7 @@ project/
 - [x] Tested on device/browser
 - [x] Committed to git
 - [x] Session log updated
-"#,
+",
     )
     .unwrap();
 }

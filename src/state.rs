@@ -98,7 +98,7 @@ impl NexusState {
         Ok(())
     }
 
-    /// Update the last_updated timestamp
+    /// Update the `last_updated` timestamp
     pub fn touch(&mut self) {
         self.last_updated = chrono::Utc::now().to_rfc3339();
     }

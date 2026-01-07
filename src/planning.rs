@@ -3,6 +3,8 @@
 //! Validates planning documents using event-based parsing to minimize memory usage.
 //! Uses pulldown-cmark to stream through markdown without loading entire files.
 
+#![allow(clippy::similar_names)] // context/content are domain-appropriate names
+
 use crate::heuristics::GateHeuristics;
 use anyhow::{Context, Result};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
@@ -327,13 +329,13 @@ fn is_standalone_placeholder(text: &str, placeholder: &str) -> bool {
     // Check for common placeholder patterns
     // e.g., "TODO", "TODO:", "TODO -", "[TODO]", "(TODO)"
     let patterns = [
-        placeholder_upper.to_string(),
-        format!("{}:", placeholder_upper),
-        format!("{} -", placeholder_upper),
-        format!("[{}]", placeholder_upper),
-        format!("({})", placeholder_upper),
-        format!("...{}", placeholder_upper),
-        format!("{}...", placeholder_upper),
+        placeholder_upper.clone(),
+        format!("{placeholder_upper}:"),
+        format!("{placeholder_upper} -"),
+        format!("[{placeholder_upper}]"),
+        format!("({placeholder_upper})"),
+        format!("...{placeholder_upper}"),
+        format!("{placeholder_upper}..."),
     ];
 
     for pattern in &patterns {
@@ -363,7 +365,7 @@ fn is_standalone_placeholder(text: &str, placeholder: &str) -> bool {
 ///
 /// # Memory Efficiency
 /// This function uses event-based streaming and does NOT load the entire file into memory.
-/// It detects unchecked checkboxes using pulldown-cmark's TaskListMarker events.
+/// It detects unchecked checkboxes using pulldown-cmark's `TaskListMarker` events.
 pub fn validate_dashboard_checkboxes(file_path: &Path) -> Result<ValidationResult> {
     let content = fs::read_to_string(file_path)
         .with_context(|| format!("Failed to read dashboard file: {}", file_path.display()))?;
@@ -477,7 +479,7 @@ impl PlanningContext {
     }
 }
 
-/// Extract sections from a markdown file as a HashMap
+/// Extract sections from a markdown file as a `HashMap`
 fn extract_sections(content: &str) -> HashMap<String, String> {
     let parser = Parser::new(content);
     let mut sections: HashMap<String, String> = HashMap::new();
@@ -508,7 +510,7 @@ fn extract_sections(content: &str) -> HashMap<String, String> {
             }
             Event::Code(code) => {
                 if !in_header && current_header.is_some() {
-                    current_content.push(format!("`{}`", code));
+                    current_content.push(format!("`{code}`"));
                 }
             }
             Event::SoftBreak | Event::HardBreak => {
@@ -548,16 +550,16 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
         let sections = extract_sections(&content);
 
         if let Some(solution) = sections.get("Solution in ONE SENTENCE:") {
-            context.problem_statement = solution.clone();
+            context.problem_statement.clone_from(solution);
         }
         if let Some(success) = sections.get("Success criteria (3 months):") {
-            context.vision = success.clone();
+            context.vision.clone_from(success);
         }
         if let Some(problem) = sections.get("My problem (personal):") {
-            context.problem_details = problem.clone();
+            context.problem_details.clone_from(problem);
         }
         if let Some(anti) = sections.get("Anti-vision (what this project is NOT):") {
-            context.anti_scope = anti.clone();
+            context.anti_scope.clone_from(anti);
         }
     }
 
@@ -569,7 +571,7 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
         let sections = extract_sections(&content);
 
         if let Some(mvp) = sections.get("MVP (Minimum Viable Product):") {
-            context.mvp_scope = mvp.clone();
+            context.mvp_scope.clone_from(mvp);
         }
         if let Some(never) = sections.get("Never (things I will NOT build):") {
             if !context.anti_scope.is_empty() {
@@ -578,7 +580,7 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
             context.anti_scope.push_str(never);
         }
         if let Some(constraints) = sections.get("Tech constraints:") {
-            context.tech_constraints = constraints.clone();
+            context.tech_constraints.clone_from(constraints);
         }
     }
 
@@ -590,16 +592,16 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
         let sections = extract_sections(&content);
 
         if let Some(stack) = sections.get("Stack (force yourself to choose NOW):") {
-            context.tech_stack = stack.clone();
+            context.tech_stack.clone_from(stack);
         }
         if let Some(why) = sections.get("Why these choices?") {
-            context.stack_justification = why.clone();
+            context.stack_justification.clone_from(why);
         }
         if let Some(not_use) = sections.get("What I will NOT use:") {
-            context.tech_exclusions = not_use.clone();
+            context.tech_exclusions.clone_from(not_use);
         }
         if let Some(deps) = sections.get("Dependencies (max 10 important ones):") {
-            context.dependencies = deps.clone();
+            context.dependencies.clone_from(deps);
         }
     }
 
@@ -611,16 +613,16 @@ pub fn parse_planning_documents(planning_dir: &Path) -> Result<PlanningContext> 
         let sections = extract_sections(&content);
 
         if let Some(folder) = sections.get("Folder structure:") {
-            context.folder_structure = folder.clone();
+            context.folder_structure.clone_from(folder);
         }
         if let Some(data) = sections.get("Data model (main entities):") {
-            context.data_model = data.clone();
+            context.data_model.clone_from(data);
         }
         if let Some(flow) = sections.get("Flow (user journey):") {
-            context.user_flow = flow.clone();
+            context.user_flow.clone_from(flow);
         }
         if let Some(decisions) = sections.get("Critical technical decisions:") {
-            context.technical_decisions = decisions.clone();
+            context.technical_decisions.clone_from(decisions);
         }
     }
 
@@ -809,7 +811,7 @@ mod tests {
 
     #[test]
     fn test_validate_document_with_valid_content() {
-        let content = r#"# Problem
+        let content = r"# Problem
 This is a test problem section with enough words to pass the minimum threshold requirement for validation purposes and testing needs for our comprehensive test suite validation. We need to ensure that all content here meets the minimum word count requirements so that this validation test can properly verify the streaming parser functionality without triggering any false positive errors during our automated testing procedures.
 
 # Vision
@@ -826,7 +828,7 @@ Technology stack description with sufficient detail and word count to pass valid
 
 # Architecture
 Architecture overview containing enough words to meet minimum requirements for section validation in our testing framework and beyond. This section should provide detailed information about the system architecture while ensuring we meet all validation criteria including minimum word counts so that our comprehensive test suite can properly verify all aspects of the markdown streaming parser functionality.
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -843,12 +845,12 @@ Architecture overview containing enough words to meet minimum requirements for s
 
     #[test]
     fn test_validate_document_with_short_section() {
-        let content = r#"# Problem
+        let content = r"# Problem
 Just a few words here.
 
 # Vision
 Not enough content.
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -868,9 +870,9 @@ Not enough content.
 
     #[test]
     fn test_validate_document_with_illegal_strings() {
-        let content = r#"# Problem
+        let content = r"# Problem
 This section has a TODO placeholder that should be detected by our validation system for testing purposes here.
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -889,9 +891,9 @@ This section has a TODO placeholder that should be detected by our validation sy
 
     #[test]
     fn test_validate_document_missing_headers() {
-        let content = r#"# Problem
+        let content = r"# Problem
 This is a problem section with adequate word count for validation purposes and testing requirements today.
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -911,11 +913,11 @@ This is a problem section with adequate word count for validation purposes and t
 
     #[test]
     fn test_validate_dashboard_all_checked() {
-        let content = r#"# Dashboard
+        let content = r"# Dashboard
 - [x] Task 1 completed
 - [x] Task 2 completed
 - [x] Task 3 completed
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -932,12 +934,12 @@ This is a problem section with adequate word count for validation purposes and t
 
     #[test]
     fn test_validate_dashboard_with_unchecked() {
-        let content = r#"# Dashboard
+        let content = r"# Dashboard
 - [x] Task 1 completed
 - [ ] Task 2 not done
 - [x] Task 3 completed
 - [ ] Task 4 pending
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -963,9 +965,9 @@ This is a problem section with adequate word count for validation purposes and t
 
     #[test]
     fn test_validate_dashboard_empty() {
-        let content = r#"# Dashboard
+        let content = r"# Dashboard
 This is just regular text with no checkboxes.
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -978,7 +980,7 @@ This is just regular text with no checkboxes.
 
     #[test]
     fn test_validate_dashboard_mixed_lists() {
-        let content = r#"# Dashboard
+        let content = r"# Dashboard
 Regular list:
 - Item 1
 - Item 2
@@ -989,7 +991,7 @@ Task list:
 
 Another regular list:
 - Item 3
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -1015,9 +1017,9 @@ Another regular list:
 
     #[test]
     fn test_validate_dashboard_context_capture() {
-        let content = r#"# Dashboard
+        let content = r"# Dashboard
 - [ ] This is a very long task description that should be truncated to 50 characters for context display
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -1084,7 +1086,7 @@ Another regular list:
 
     #[test]
     fn test_parse_mvp_sprints() {
-        let content = r#"# MVP broken into sprints
+        let content = r"# MVP broken into sprints
 
 ## Sprint 0: Setup (day 1)
 - [x] Create nexus repo with Cargo.toml
@@ -1105,7 +1107,7 @@ _Focus: Creating the Tactical Staging Area._
 - [ ] **MVP Parser:** Extract specific sprint tasks
 - [ ] **Branching Logic:** Use the `git2` crate
 **Exit criteria:** `nexus sprint X` creates a clean branch
-"#;
+";
 
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(content.as_bytes()).unwrap();
@@ -1135,7 +1137,7 @@ _Focus: Creating the Tactical Staging Area._
 
     #[test]
     fn test_extract_tasks_and_context() {
-        let content = r#"
+        let content = r"
 _Focus: Test focus statement._
 
 - [x] Task one completed
@@ -1145,7 +1147,7 @@ _Focus: Test focus statement._
 Some random text here.
 
 **Exit criteria:** All tests pass
-"#;
+";
 
         let mut sprint = SprintData {
             number: 1,

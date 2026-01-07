@@ -16,7 +16,7 @@ use crate::templating::generate_claude_md;
 /// Execute the unlock command
 ///
 /// # Flow:
-/// 1. Load config from project_path
+/// 1. Load config from `project_path`
 /// 2. Run gate check - abort if planning incomplete
 /// 3. Parse planning documents into context
 /// 4. Generate CLAUDE.md via templating
@@ -46,7 +46,7 @@ pub fn execute(project_path: &Path) -> Result<()> {
     // Phase 2: Safety Check - Gate Integration
     println!("{}", "🚪 Running gate check...".cyan().bold());
     match commands::gate::execute(project_path) {
-        Ok(_) => {
+        Ok(()) => {
             println!();
             println!(
                 "{}",

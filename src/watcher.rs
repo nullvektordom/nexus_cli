@@ -51,12 +51,13 @@ pub struct SentinelWatcher {
 
 impl SentinelWatcher {
     /// Create and start a new Sentinel watcher
+    #[allow(clippy::unnecessary_wraps)] // Consistent API, may add validation later
     pub fn new(brain_url: String) -> Result<Self> {
         let (tx, rx) = bounded(100);
 
         let thread_handle = thread::spawn(move || {
             if let Err(e) = run_watcher_loop(rx, brain_url) {
-                eprintln!("Watcher thread error: {}", e);
+                eprintln!("Watcher thread error: {e}");
             }
         });
 
@@ -106,6 +107,7 @@ impl SentinelWatcher {
 }
 
 /// Main watcher loop running in background thread
+#[allow(clippy::needless_pass_by_value)] // Receiver must be owned for thread
 fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<()> {
     let mut _current_watcher: Option<notify::RecommendedWatcher> = None;
     let mut current_project: Option<String> = None;
@@ -123,7 +125,7 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
                     repo_path,
                     obsidian_path,
                 } => {
-                    println!("🔍 Sentinel: Starting watch for project '{}'", project_id);
+                    println!("🔍 Sentinel: Starting watch for project '{project_id}'");
 
                     // Stop existing watcher
                     _current_watcher = None;
@@ -178,7 +180,7 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
             && let Some(ref project_id) = current_project
             && let Err(e) = handle_file_event(&event, project_id, &brain_url, &watched_paths)
         {
-            eprintln!("Error handling file event: {}", e);
+            eprintln!("Error handling file event: {e}");
         }
 
         // Sleep briefly to avoid busy-waiting
@@ -189,6 +191,7 @@ fn run_watcher_loop(rx: Receiver<WatcherMessage>, brain_url: String) -> Result<(
 }
 
 /// Handle a file system event
+#[allow(clippy::unnecessary_wraps)] // May add error handling later
 fn handle_file_event(
     event: &Event,
     project_id: &str,
@@ -220,13 +223,11 @@ fn handle_file_event(
         let is_architecture = path
             .file_name()
             .and_then(|n| n.to_str())
-            .map(|n| n == "04-Architecture.md")
-            .unwrap_or(false);
+            .is_some_and(|n| n == "04-Architecture.md");
 
         if is_architecture {
             println!(
-                "🧠 Architecture.md changed - triggering full re-index for {}",
-                project_id
+                "🧠 Architecture.md changed - triggering full re-index for {project_id}"
             );
             // TODO: Implement full project re-index
         }
@@ -269,10 +270,10 @@ fn get_machine_id() -> String {
 /// Classify a file into a layer based on its path
 ///
 /// Classification rules:
-/// - Files in `01-PLANNING/` → ProjectArchitecture
-/// - Files in `00-MANAGEMENT/sprints/` → SprintMemory
-/// - Files in `src/`, `tests/`, etc. → SourceCode
-/// - Files in a global standards directory → GlobalStandard
+/// - Files in `01-PLANNING/` → `ProjectArchitecture`
+/// - Files in `00-MANAGEMENT/sprints/` → `SprintMemory`
+/// - Files in `src/`, `tests/`, etc. → `SourceCode`
+/// - Files in a global standards directory → `GlobalStandard`
 fn classify_file_layer(file_path: &Path) -> Layer {
     let path_str = file_path.to_string_lossy();
 
@@ -318,7 +319,7 @@ fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()>
     let file_type = file_path
         .extension()
         .and_then(|e| e.to_str())
-        .map(|s| s.to_string());
+        .map(std::string::ToString::to_string);
 
     // Classify file into layer
     let layer = classify_file_layer(file_path);
@@ -355,7 +356,8 @@ fn index_file(file_path: &Path, project_id: &str, brain_url: &str) -> Result<()>
                 file_path.display().to_string(),
             );
             metadata.file_type = file_type.clone();
-            metadata.chunk_index = Some(idx as u32);
+            // Chunk index is always small, truncation is acceptable
+            metadata.chunk_index = Some(u32::try_from(idx).unwrap_or(u32::MAX));
 
             // Generate unique ID for this chunk
             let point_id = generate_point_id(file_path, idx);

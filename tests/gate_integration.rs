@@ -13,7 +13,7 @@ fn create_nexus_config(project_path: &Path, vault_path: &Path) {
         r#"[project]
 name = "test_project"
 version = "0.1.0"
-obsidian_path = "{}"
+obsidian_path = "{vault_path_str}"
 
 [structure]
 planning_dir = "01-PLANNING"
@@ -33,8 +33,7 @@ status = "in_progress"
 
 [templates]
 claude_template = "templates/CLAUDE.md.example"
-"#,
-        vault_path_str
+"#
     );
     fs::write(project_path.join("nexus.toml"), &config_content).unwrap();
 }
@@ -75,7 +74,7 @@ fn create_heuristics(project_path: &Path) {
 
 /// Helper to create a valid planning document
 fn create_valid_planning_doc(path: &PathBuf) {
-    let content = r#"# Problem
+    let content = r"# Problem
 This is a detailed problem statement with more than fifty words to ensure it passes the minimum word count validation requirement for our comprehensive testing purposes today. The problem is clearly defined and articulated with sufficient context and detail to meet all validation criteria and requirements specified in the heuristics configuration file for proper gate validation functionality.
 
 # Vision
@@ -92,38 +91,38 @@ This is a detailed tech stack description with more than fifty words to ensure i
 
 # Architecture
 This is a comprehensive architecture overview with more than fifty words to ensure it passes the minimum word count validation requirement for our comprehensive testing purposes today. The architecture is described clearly with adequate technical detail and context to meet all validation criteria and requirements specified in the heuristics configuration.
-"#;
+";
     fs::write(path, content).unwrap();
 }
 
 /// Helper to create a planning doc with issues
 fn create_invalid_planning_doc(path: &PathBuf) {
-    let content = r#"# Problem
+    let content = r"# Problem
 TODO: Fill this in later
 
 # Vision
 Not enough words here.
-"#;
+";
     fs::write(path, content).unwrap();
 }
 
 /// Helper to create a valid dashboard
 fn create_valid_dashboard(path: &PathBuf) {
-    let content = r#"# Dashboard
+    let content = r"# Dashboard
 - [x] Task 1 completed
 - [x] Task 2 completed
 - [x] Task 3 completed
-"#;
+";
     fs::write(path, content).unwrap();
 }
 
 /// Helper to create a dashboard with unchecked items
 fn create_invalid_dashboard(path: &PathBuf) {
-    let content = r#"# Dashboard
+    let content = r"# Dashboard
 - [x] Task 1 completed
 - [ ] Task 2 not done
 - [x] Task 3 completed
-"#;
+";
     fs::write(path, content).unwrap();
 }
 

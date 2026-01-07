@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 mod brain;
+mod catalyst;
 mod commands;
 mod config;
 mod context;
@@ -58,19 +59,19 @@ fn main() {
     match cli.command {
         Commands::Init { project_name } => {
             if let Err(e) = commands::init::execute(&project_name) {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
         Commands::Gate { project_path } => {
             if let Err(e) = commands::gate::execute(&project_path) {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
         Commands::Unlock { project_path } => {
             if let Err(e) = commands::unlock::execute(&project_path) {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
@@ -79,13 +80,13 @@ fn main() {
             sprint_number,
         } => {
             if let Err(e) = commands::sprint::execute(&project_path, sprint_number) {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
         Commands::Shell => {
             if let Err(e) = commands::shell::execute() {
-                eprintln!("{}", e);
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
