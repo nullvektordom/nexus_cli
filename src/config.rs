@@ -129,11 +129,11 @@ pub struct LlmConfig {
 }
 
 fn default_provider() -> String {
-    "openrouter".to_string()
+    "gemini".to_string()
 }
 
 fn default_model() -> String {
-    "deepseek/deepseek-r1".to_string()
+    "gemini-3-pro".to_string()
 }
 
 fn default_llm_enabled() -> bool {
