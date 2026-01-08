@@ -840,7 +840,7 @@ Please regenerate the document incorporating the user's feedback while maintaini
 
 /// Parse vision document into structured data
 #[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
-fn parse_vision_document(content: &str) -> Result<VisionData> {
+pub fn parse_vision_document(content: &str) -> Result<VisionData> {
     let sections = extract_sections(content);
 
     Ok(VisionData {

@@ -7,6 +7,7 @@ mod commands;
 mod config;
 mod context;
 mod embeddings;
+mod genesis;
 mod git_ops;
 mod heuristics;
 mod history;
@@ -69,6 +70,14 @@ enum Commands {
         /// Path to the project directory
         project_path: PathBuf,
     },
+    /// Project Genesis - Generate full planning foundation
+    Plan {
+        /// Path to the project directory
+        project_path: PathBuf,
+        /// Initialize project genesis (generate docs 02-05)
+        #[arg(long)]
+        init: bool,
+    },
 }
 
 fn main() {
@@ -117,6 +126,18 @@ fn main() {
         Commands::TaskDone { project_path } => {
             if let Err(e) = commands::task::execute_done(&project_path) {
                 eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        Commands::Plan { project_path, init } => {
+            if init {
+                if let Err(e) = commands::plan::execute_init(&project_path) {
+                    eprintln!("{e}");
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("Usage: nexus plan --init <project_path>");
+                eprintln!("Run 'nexus plan --help' for more information.");
                 std::process::exit(1);
             }
         }
