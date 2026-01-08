@@ -1391,8 +1391,8 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
 /// Generate a query embedding (stub - replace with real embedding model)
 fn generate_query_embedding(_query: &str) -> Vec<f32> {
     // In production, use an actual embedding model
-    // For now, return a dummy vector
-    vec![0.0; 1536]
+    // For now, return a dummy vector (384 for all-MiniLM-L6-v2)
+    vec![0.0; 384]
 }
 
 /// Find the paths to the ONNX model and tokenizer
