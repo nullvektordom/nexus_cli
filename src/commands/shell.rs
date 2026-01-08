@@ -188,7 +188,7 @@ fn print_banner(state: &NexusState) -> Result<()> {
     println!();
     println!(
         "{}",
-        "Available commands: use, gate, unlock, sprint, plan, catalyst, status, context, help, exit".dimmed()
+        "Available commands: use, gate, unlock, sprint, plan, catalyst, diagnose, status, context, help, exit".dimmed()
     );
     println!("{}", "Type 'help' for more information.".dimmed());
     println!(
@@ -237,6 +237,7 @@ fn execute_command(
         "status" => execute_status(state),
         "catalyst" => execute_catalyst(state, args),
         "plan" => execute_plan(state, args),
+        "diagnose" | "diag" => execute_diagnose(state),
         "watch" => execute_watch(state, watcher, watcher_enabled),
         "unwatch" => execute_unwatch(watcher, watcher_enabled),
         "why" => execute_why(state, last_gate_error),
@@ -304,6 +305,10 @@ fn print_help() {
     println!(
         "  {}       Check Brain health and memory usage",
         "status".cyan()
+    );
+    println!(
+        "  {}    Test LLM configuration and connectivity",
+        "diagnose".cyan()
     );
     println!(
         "  {}          Show current active project and paths",
@@ -716,6 +721,15 @@ fn execute_plan(state: &NexusState, args: &[&str]) -> Result<()> {
             anyhow::bail!("Unknown plan command: '{subcommand}'. Use 'plan help' for usage.")
         }
     }
+}
+
+/// Execute the diagnose command
+fn execute_diagnose(state: &NexusState) -> Result<()> {
+    let repo_path = state
+        .get_active_repo_path()
+        .ok_or_else(|| anyhow::anyhow!("No active project. Use 'use <project>' first."))?;
+
+    crate::commands::diagnose::execute(&repo_path)
 }
 
 /// Print plan-specific help

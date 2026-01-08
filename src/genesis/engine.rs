@@ -85,15 +85,33 @@ impl GenesisEngine {
             .llm_client
             .complete_with_system(GENESIS_SYSTEM_PROMPT, &user_prompt)
             .await
-            .context("Failed to generate documents via LLM")?;
+            .with_context(|| {
+                "Failed to generate documents via LLM. Possible causes:\n\
+                • API key not set or invalid\n\
+                • Network connectivity issues\n\
+                • LLM provider API error\n\
+                • Rate limiting\n\n\
+                Check your API key and network connection."
+            })?;
+
+        // Debug: Show raw response
+        println!("{}", "═══════════════════════════════════════".yellow());
+        println!("{}", "  DEBUG: Raw LLM Response".yellow().bold());
+        println!("{}", "═══════════════════════════════════════".yellow());
+        println!();
+        println!("{}", response);
+        println!();
+        println!("{}", "═══════════════════════════════════════".yellow());
+        println!();
 
         // Parse response into documents
         let documents = parse_genesis_response(&response);
 
-        if documents.len() != 4 {
+        if documents.len() != 3 {
             anyhow::bail!(
-                "LLM did not generate all 4 documents. Got {} documents. \
-                Response may need refinement.",
+                "LLM did not generate all 3 documents. Got {} documents. \
+                Response may need refinement.\n\n\
+                Check the raw response above to see if the LLM used the correct ---NEXT_DOC--- separator.",
                 documents.len()
             );
         }
@@ -162,9 +180,10 @@ impl GenesisEngine {
         );
         println!();
         println!("{}", "📋 Next steps:".bold());
-        println!("   1. Review documents in Obsidian");
-        println!("   2. Run {} to validate planning", "nexus gate .".cyan());
-        println!("   3. Run {} to generate CLAUDE.md", "nexus unlock .".cyan());
+        println!("   1. Review generated documents in Obsidian");
+        println!("   2. Ensure 01-Problem-and-Vision.md exists and is complete");
+        println!("   3. Run {} to validate all planning documents", "nexus gate .".cyan());
+        println!("   4. Run {} to generate CLAUDE.md and unlock project", "nexus unlock .".cyan());
         println!();
 
         Ok(())

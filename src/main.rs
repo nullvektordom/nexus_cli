@@ -78,6 +78,11 @@ enum Commands {
         #[arg(long)]
         init: bool,
     },
+    /// Diagnose LLM configuration and connectivity
+    Diagnose {
+        /// Path to the project directory
+        project_path: PathBuf,
+    },
 }
 
 fn main() {
@@ -138,6 +143,12 @@ fn main() {
             } else {
                 eprintln!("Usage: nexus plan --init <project_path>");
                 eprintln!("Run 'nexus plan --help' for more information.");
+                std::process::exit(1);
+            }
+        }
+        Commands::Diagnose { project_path } => {
+            if let Err(e) = commands::diagnose::execute(&project_path) {
+                eprintln!("{e}");
                 std::process::exit(1);
             }
         }
