@@ -1,3 +1,4 @@
+pub mod diagnose;
 pub mod gate;
 pub mod init;
 pub mod plan;

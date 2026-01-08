@@ -1,44 +1,22 @@
 [project]
-name = "nexus_cli"
+name = "settle_mate"
 version = "0.1.0"
-# Path to your Obsidian project root
-obsidian_path = "/home/nullvektor/obsidian/projects/nexus_cli"
-obsidian_adhoc_path = "/home/nullvektor/obsidian/work"
+obsidian_path = "/home/nullvektor/obsidian/work/settle_mate"
 
 [structure]
 planning_dir = "01-PLANNING"
 management_dir = "00-MANAGEMENT"
-sprint_dir = "00-MANAGEMENT/sprints"
+sprint_dir = "00-MANAGEMENT/Sprints"
 
 [gate]
-# We'll use the local sprint file we just created
-heuristics_file = "00-MANAGEMENT/sprints/sprint-2-gate-command/local-docs/Gate-Heuristics.json"
+heuristics_file = ".nexus/gate-heuristics.json"
 strict_mode = true
+
+[obsidian]
+planning_path = "/home/nullvektor/obsidian/work/settle_mate"
 
 [state]
 is_unlocked = false
 
-[state.active_sprint]
-current = "sprint-7-adhoc-task-feature"
-status = "approved"
-
 [templates]
 claude_template = "templates/CLAUDE.md.example"
-
-[brain]
-qdrant_url = "http://100.105.8.97:6334"
-enabled = true
-
-[llm]
-provider = "openrouter"  # Default (cost-effective). Options: "openrouter", "claude", "gemini"
-model = "deepseek/deepseek-r1"  # Default: DeepSeek R1 (highly cost-effective)
-enabled = true
-# Note: Set API key via environment variable:
-#   export OPENROUTER_API_KEY="your-key"  (for OpenRouter - default)
-#   export ANTHROPIC_API_KEY="your-key"   (for Claude)
-#   export GOOGLE_API_KEY="your-key"      (for Gemini)
-#
-# Alternative OpenRouter models:
-#   - "deepseek/deepseek-r1" (default, great performance/cost)
-#   - "anthropic/claude-3.5-sonnet" (via OpenRouter)
-#   - "google/gemini-2.0-flash-thinking-exp-1219" (via OpenRouter)
