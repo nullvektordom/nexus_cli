@@ -575,6 +575,18 @@ Please regenerate the document incorporating the user's feedback while maintaini
             feedback
         );
 
+        // SAFETY GATE: Show combined prompt and ask for confirmation
+        let full_refinement_prompt = format!(
+            "SYSTEM:\n{}\n\nUSER:\n{}",
+            base_prompt.system_prompt(),
+            refinement_prompt
+        );
+        let context_desc = format!("Catalyst refinement - {:?}", doc_type);
+        let confirmed = crate::llm::confirm_llm_prompt(&full_refinement_prompt, &context_desc)?;
+        if !confirmed {
+            anyhow::bail!("User cancelled refinement request");
+        }
+
         println!("{}", "  Calling LLM for refinement...".dimmed());
 
         // Call LLM with refinement prompt
@@ -783,6 +795,18 @@ Please regenerate the document incorporating the user's feedback while maintaini
             DocumentType::MvpBreakdown => PromptTemplate::for_mvp_breakdown(context),
         };
 
+        // SAFETY GATE: Show combined prompt and ask for confirmation
+        let full_prompt = format!(
+            "SYSTEM:\n{}\n\nUSER:\n{}",
+            prompt.system_prompt(),
+            prompt.user_prompt()
+        );
+        let context_desc = format!("Catalyst - {:?}", doc_type);
+        let confirmed = crate::llm::confirm_llm_prompt(&full_prompt, &context_desc)?;
+        if !confirmed {
+            anyhow::bail!("User cancelled LLM request");
+        }
+
         println!("{}", "  Calling LLM...".dimmed());
 
         // Call LLM with system and user prompts
@@ -816,7 +840,7 @@ Please regenerate the document incorporating the user's feedback while maintaini
 
 /// Parse vision document into structured data
 #[allow(clippy::unnecessary_wraps)] // Consistent API with other parse functions
-fn parse_vision_document(content: &str) -> Result<VisionData> {
+pub fn parse_vision_document(content: &str) -> Result<VisionData> {
     let sections = extract_sections(content);
 
     Ok(VisionData {

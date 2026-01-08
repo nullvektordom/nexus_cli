@@ -314,16 +314,17 @@ fn test_stress_missing_heuristics_file() {
     fs::create_dir_all(&vault_path).unwrap();
     create_nexus_config(project_path, &vault_path.clone());
 
-    // Don't create heuristics file
+    // Don't create heuristics file - NEW BEHAVIOR: Auto-creates bootstrap
 
     // Run gate command
     let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
+    // NEW BEHAVIOR: Gate now auto-creates bootstrap heuristics instead of failing
+    // It should create .nexus/gate-heuristics.json and inform the user
     cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("Heuristics file not found"))
-        .stderr(predicate::str::contains("Check the 'heuristics_file'"));
+        .failure() // Still fails due to missing planning docs
+        .stdout(predicate::str::contains("Created bootstrap heuristics"));
 }
 
 // ============================================================================
@@ -384,7 +385,7 @@ fn test_stress_malformed_heuristics_json() {
     fs::create_dir_all(&vault_path).unwrap();
     create_nexus_config(project_path, &vault_path.clone());
 
-    // Write malformed JSON to heuristics file
+    // Write malformed JSON to LEGACY heuristics file location
     let bad_json = r#"{
   "min_section_length": "not a number",
   "required_headers": "not an array"
@@ -396,9 +397,12 @@ fn test_stress_malformed_heuristics_json() {
     let mut cmd = cargo_bin_cmd!("nexus");
     cmd.arg("gate").arg(project_path);
 
+    // NEW BEHAVIOR: With smart fallback, malformed legacy file causes:
+    // 1. Stable path doesn't exist → check legacy
+    // 2. Legacy exists but fails to parse → error propagates
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("Failed to parse heuristics"));
+        .stderr(predicate::str::contains("Failed to load or create gate heuristics"));
 }
 
 // ============================================================================

@@ -87,6 +87,73 @@ pub fn load_heuristics(path: &Path) -> Result<GateHeuristics> {
     Ok(heuristics)
 }
 
+/// Create and save bootstrap heuristics to the specified path
+/// Creates parent directories if they don't exist
+///
+/// # Arguments
+/// * `path` - Target path for the heuristics file (e.g., `.nexus/gate-heuristics.json`)
+///
+/// # Returns
+/// * `Ok(())` - Successfully created and saved bootstrap heuristics
+/// * `Err` - Failed to create directory or write file
+pub fn create_bootstrap_heuristics(path: &Path) -> Result<()> {
+    use std::fs;
+
+    // Create parent directory if it doesn't exist
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+    }
+
+    // Use default heuristics (permissive for bootstrapping)
+    let heuristics = GateHeuristics::default();
+
+    // Serialize to JSON with pretty printing
+    let json = serde_json::to_string_pretty(&heuristics)
+        .context("Failed to serialize bootstrap heuristics")?;
+
+    // Write to file
+    fs::write(path, json)
+        .with_context(|| format!("Failed to write bootstrap heuristics to: {}", path.display()))?;
+
+    Ok(())
+}
+
+/// Load heuristics with smart fallback:
+/// 1. Try stable path (`.nexus/gate-heuristics.json`)
+/// 2. Try legacy path (from config)
+/// 3. Create bootstrap heuristics at stable path and return defaults
+///
+/// # Arguments
+/// * `stable_path` - Preferred stable location
+/// * `legacy_path` - Optional legacy location from config
+///
+/// # Returns
+/// * `Ok(GateHeuristics)` - Loaded or created heuristics
+/// * `Err` - Critical failure (directory creation failed, etc.)
+pub fn load_heuristics_with_fallback(
+    stable_path: &Path,
+    legacy_path: Option<&Path>,
+) -> Result<GateHeuristics> {
+    // Try stable path first
+    if stable_path.exists() {
+        return load_heuristics(stable_path);
+    }
+
+    // Try legacy path if provided
+    if let Some(legacy) = legacy_path {
+        if legacy.exists() {
+            return load_heuristics(legacy);
+        }
+    }
+
+    // Neither exists - create bootstrap at stable path
+    create_bootstrap_heuristics(stable_path)
+        .context("Failed to create bootstrap heuristics")?;
+
+    Ok(GateHeuristics::default())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

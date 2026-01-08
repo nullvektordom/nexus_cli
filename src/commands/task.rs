@@ -11,6 +11,9 @@ use colored::Colorize;
 use std::path::Path;
 
 /// Execute the `task start` command
+///
+/// This is a PRIVILEGED COMMAND that bypasses strict mode gate checks.
+/// It ensures heuristics exist (creating bootstrap if needed) before running gate validation.
 pub fn execute_start(project_path: &Path) -> Result<()> {
     // Load project configuration
     let config_path = project_path.join("nexus.toml");
@@ -26,6 +29,21 @@ pub fn execute_start(project_path: &Path) -> Result<()> {
 
     println!("{} {}", "🚀".bold().cyan(), "INITIATING TASK START SEQUENCE...".bold());
     println!();
+
+    // PRIVILEGED: Ensure heuristics exist before gate check
+    // This prevents the "Moment 22" deadlock
+    let stable_heuristics_path = config.get_stable_heuristics_path();
+    if !stable_heuristics_path.exists() {
+        println!("{} {}", "📦".bold().cyan(), "Bootstrap: Creating heuristics file...".bold());
+        crate::heuristics::create_bootstrap_heuristics(&stable_heuristics_path)
+            .context("Failed to create bootstrap heuristics")?;
+        println!(
+            "  {} Created: {}",
+            "✓".green().bold(),
+            stable_heuristics_path.display().to_string().dimmed()
+        );
+        println!();
+    }
 
     // Run gate validation internally
     println!("{} {}", "🔒".bold().yellow(), "Running gate validation...".bold());

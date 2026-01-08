@@ -546,3 +546,73 @@ impl LlmClient {
         self.complete_gemini_full(system_prompt, &[], None, user_prompt).await
     }
 }
+
+/// Display prompt to user and ask for confirmation before sending to LLM
+///
+/// # Arguments
+/// * `prompt` - The full prompt text to display
+/// * `context_description` - Brief description of what this prompt is for (e.g., "Catalyst generation")
+///
+/// # Returns
+/// * `Ok(true)` - User confirmed, proceed with LLM call
+/// * `Ok(false)` - User cancelled
+/// * `Err` - Failed to get user input
+pub fn confirm_llm_prompt(prompt: &str, context_description: &str) -> Result<bool> {
+    use colored::Colorize;
+    use dialoguer::Confirm;
+
+    println!();
+    println!("{}", "═".repeat(80).cyan());
+    println!("{} {}", "📤 LLM PROMPT PREVIEW:".bold().cyan(), context_description.dimmed());
+    println!("{}", "═".repeat(80).cyan());
+    println!();
+
+    // Display prompt with truncation if too long
+    let max_display_lines = 50;
+    let lines: Vec<&str> = prompt.lines().collect();
+    let total_lines = lines.len();
+
+    if lines.len() > max_display_lines {
+        for line in &lines[..max_display_lines] {
+            println!("{}", line.dimmed());
+        }
+        println!();
+        println!(
+            "{}",
+            format!(
+                "... ({} more lines truncated) ...",
+                lines.len() - max_display_lines
+            )
+            .yellow()
+        );
+    } else {
+        for line in &lines {
+            println!("{}", line.dimmed());
+        }
+    }
+
+    println!();
+    println!("{}", "═".repeat(80).cyan());
+    println!(
+        "  {} Total: {} characters, {} lines",
+        "📊".dimmed(),
+        prompt.len().to_string().cyan(),
+        total_lines.to_string().cyan()
+    );
+    println!("{}", "═".repeat(80).cyan());
+    println!();
+
+    // Prompt for confirmation
+    let confirmed = Confirm::new()
+        .with_prompt("Send this prompt to LLM?")
+        .default(false)
+        .show_default(true)
+        .interact()
+        .context("Failed to get user confirmation")?;
+
+    if !confirmed {
+        println!("{}", "🚫 Cancelled - prompt not sent".yellow());
+    }
+
+    Ok(confirmed)
+}
