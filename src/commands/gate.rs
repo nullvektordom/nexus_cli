@@ -7,7 +7,6 @@
 #![allow(clippy::if_not_else)] // Validation logic is clearer with existence checks first
 
 use crate::config::NexusConfig;
-use crate::heuristics::load_heuristics;
 use crate::planning::{
     ValidationIssue, validate_dashboard_checkboxes, validate_planning_document_with_headers,
 };
@@ -86,24 +85,27 @@ pub fn execute(project_path: &Path) -> Result<()> {
         // ADHOC MODE: Validate adhoc planning documents
         validate_adhoc_planning(&vault_path, &config)?
     } else {
-        // Sprint mode - load heuristics file
-        let heuristics_path = vault_path.join(&config.gate.heuristics_file);
+        // Sprint mode - load heuristics file with smart fallback
+        let stable_path = project_path.join(".nexus/gate-heuristics.json");
+        let legacy_path = vault_path.join(&config.gate.heuristics_file);
 
-        // DEFENSIVE: Check if heuristics file exists
-        if !heuristics_path.exists() {
-            anyhow::bail!(
-                "Heuristics file not found: {}\n  \
-                 Check the 'heuristics_file' path in your nexus.toml configuration.",
-                heuristics_path.display()
+        // Check if we need to bootstrap
+        let needs_bootstrap = !stable_path.exists() && !legacy_path.exists();
+
+        // Use smart fallback: stable → legacy → bootstrap
+        let heuristics = crate::heuristics::load_heuristics_with_fallback(
+            &stable_path,
+            Some(&legacy_path),
+        ).context("Failed to load or create gate heuristics")?;
+
+        // Inform user if bootstrap was created
+        if needs_bootstrap {
+            println!(
+                "  {} Created bootstrap heuristics at: {}",
+                "ℹ".cyan(),
+                stable_path.display().to_string().dimmed()
             );
         }
-
-        let heuristics = load_heuristics(&heuristics_path).with_context(|| {
-            format!(
-                "Failed to parse heuristics file: {}",
-                heuristics_path.display()
-            )
-        })?;
 
         if is_unlocked {
             // PHASE 2: Active Sprint Validation

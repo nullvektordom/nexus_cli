@@ -247,6 +247,19 @@ impl NexusConfig {
             .join(&self.structure.management_dir)
             .join(dashboard)
     }
+
+    /// Get the stable heuristics file path (.nexus/gate-heuristics.json in project root)
+    /// This is the new standard location that prevents "Moment 22" deadlocks
+    pub fn get_stable_heuristics_path(&self) -> PathBuf {
+        self.get_repo_path().join(".nexus/gate-heuristics.json")
+    }
+
+    /// Get the legacy heuristics file path (from config)
+    /// Used for backward compatibility
+    #[allow(dead_code)] // Reserved for future migration tooling
+    pub fn get_legacy_heuristics_path(&self) -> PathBuf {
+        self.get_repo_path().join(&self.gate.heuristics_file)
+    }
 }
 
 #[cfg(test)]
