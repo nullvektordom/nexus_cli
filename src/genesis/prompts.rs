@@ -101,9 +101,20 @@ pub fn parse_genesis_response(response: &str) -> Vec<(String, String)> {
         .enumerate()
         .filter_map(|(idx, content)| {
             if idx < expected_docs.len() {
-                let clean_content = content.trim().to_string();
+                let mut clean_content = content.trim().to_string();
+
+                // Remove filename header if present (e.g., "03-Tech-Stack.md:")
+                // LLMs often include this when they see it in the prompt structure
+                let filename = expected_docs[idx].filename;
+                if clean_content.starts_with(filename) {
+                    // Remove the filename line
+                    if let Some(newline_pos) = clean_content.find('\n') {
+                        clean_content = clean_content[newline_pos + 1..].trim().to_string();
+                    }
+                }
+
                 if !clean_content.is_empty() {
-                    Some((expected_docs[idx].filename.to_string(), clean_content))
+                    Some((filename.to_string(), clean_content))
                 } else {
                     None
                 }

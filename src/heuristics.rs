@@ -34,7 +34,7 @@ impl Default for GateHeuristics {
     /// Provides hardcoded fallback values matching Gate-Heuristics.json
     fn default() -> Self {
         Self {
-            min_section_length: 20,
+            min_section_length: 15,
             required_headers: vec![
                 "My problem (personal):".to_string(),
                 "MVP (Minimum Viable Product):".to_string(),
@@ -161,7 +161,7 @@ mod tests {
     fn test_default_heuristics() {
         let heuristics = GateHeuristics::default();
 
-        assert_eq!(heuristics.min_section_length, 20);
+        assert_eq!(heuristics.min_section_length, 15);
         assert_eq!(heuristics.required_headers.len(), 5);
         assert!(heuristics.required_headers.contains(&"My problem (personal):".to_string()));
         assert!(

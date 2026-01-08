@@ -6,10 +6,9 @@
 .vscode/
 .idea/
 
-.env
-.nexus/
-target/
-
 # OS
 .DS_Store
 Thumbs.db
+.env
+.nexus/
+target/

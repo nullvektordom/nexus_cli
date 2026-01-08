@@ -130,10 +130,11 @@ Structure your response as:
 CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
 2. Use EXACTLY these section headers (with ## prefix):
-   - ## Language:
-   - ## Framework/Library:
-   - ## Database (if needed):
-   - ## Justification:
+   - ## Stack (force yourself to choose NOW):
+   - ## Why these choices?
+   - ## What I will NOT use:
+   - ## Dependencies (important ones):
+   - ## Development environment:
 3. Each section must have substantial content
 4. Be specific - name actual technologies, not categories
 5. NO placeholders like TODO, TBD, [fill], [describe]
@@ -141,10 +142,11 @@ CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 
 REASONING GUIDANCE:
 Think step-by-step about:
-- What language best fits the developer's skills and project needs?
-- What framework minimizes boilerplate while staying flexible?
-- Does the MVP actually need a database, or can it start simpler?
-- How do these choices support rapid iteration?
+- What technologies (frontend, backend, database, hosting) best fit the developer's skills and project needs?
+- Why are these specific choices appropriate for this MVP?
+- What technologies should be explicitly avoided to prevent scope creep?
+- What are the key dependencies needed (max 10)?
+- What development environment will be used (IDE, OS, device)?
 
 After reasoning, output the complete markdown document with all sections filled out."#.to_string();
 
@@ -356,24 +358,30 @@ Structure your response as:
 
 CRITICAL REQUIREMENTS FOR FINAL OUTPUT:
 1. Output ONLY valid markdown - no explanations, no meta-commentary
-2. Create 3-5 sprint sections with headers like: ## Sprint 0: Setup (day 1)
+2. Create sprint sections starting with Sprint 1, Sprint 2, Sprint 3, etc. (Can optionally include Sprint 0 for setup)
+   Example headers: ## Sprint 0: Setup (day 1), ## Sprint 1: Core Feature (days 2-4)
 3. Each sprint must have:
    - A descriptive name
    - 3-7 concrete tasks as checkboxes (- [ ] Task)
    - **Exit criteria:** with a measurable goal
-4. Be specific and concrete - NO placeholders like TODO, TBD, [fill], [describe]
-5. Sprint 0 should always be "Setup" (repo, dev environment, hello world)
-6. Order sprints logically (foundation → features → polish)
-7. Keep MVP scope tight - max 5 sprints
+4. Include a final section: ## Definition of Done (each sprint):
+   - [ ] Builds without errors
+   - [ ] Tested on device/browser
+   - [ ] Committed to git
+   - [ ] Session log updated
+5. Be specific and concrete - NO placeholders like TODO, TBD, [fill], [describe]
+6. Sprint 0 (optional) should be "Setup" (repo, dev environment, hello world)
+7. Order sprints logically (foundation → features → polish)
+8. Keep MVP scope tight - max 5 sprints
 
 REASONING GUIDANCE:
 Think step-by-step about:
-- What needs to be set up first? (Sprint 0)
-- What is the core feature that proves the concept?
+- What needs to be set up first? (Optional Sprint 0)
+- What is the core feature that proves the concept? (Sprint 1)
 - What features build on each other?
 - What can be deferred to Version 2?
 
-After reasoning, output the complete markdown document with all sprint sections."#.to_string();
+After reasoning, output the complete markdown document with all sprint sections and the Definition of Done."#.to_string();
 
         let user_prompt = format!(
             r#"Based on this vision, scope, tech stack, and architecture, generate a comprehensive MVP Breakdown:

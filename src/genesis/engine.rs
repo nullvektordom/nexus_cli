@@ -108,9 +108,9 @@ impl GenesisEngine {
         // Parse response into documents
         let documents = parse_genesis_response(&response);
 
-        if documents.len() != 3 {
+        if documents.len() != 4 {
             anyhow::bail!(
-                "LLM did not generate all 3 documents. Got {} documents. \
+                "LLM did not generate all 4 documents. Got {} documents. \
                 Response may need refinement.\n\n\
                 Check the raw response above to see if the LLM used the correct ---NEXT_DOC--- separator.",
                 documents.len()
