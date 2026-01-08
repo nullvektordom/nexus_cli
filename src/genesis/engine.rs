@@ -13,17 +13,17 @@ use std::path::PathBuf;
 
 /// Genesis Engine for creating foundational planning documents
 pub struct GenesisEngine {
-    /// Path to Obsidian vault
-    obsidian_path: PathBuf,
+    /// Path to planning directory (01-PLANNING)
+    planning_path: PathBuf,
     /// LLM client for generation
     llm_client: LlmClient,
 }
 
 impl GenesisEngine {
     /// Create a new Genesis engine
-    pub fn new(obsidian_path: PathBuf, llm_client: LlmClient) -> Result<Self> {
+    pub fn new(planning_path: PathBuf, llm_client: LlmClient) -> Result<Self> {
         Ok(Self {
-            obsidian_path,
+            planning_path,
             llm_client,
         })
     }
@@ -42,7 +42,7 @@ impl GenesisEngine {
         println!();
 
         // Load vision document
-        let vision_path = self.obsidian_path.join("01-Problem-and-Vision.md");
+        let vision_path = self.planning_path.join("01-Problem-and-Vision.md");
         let vision_content = fs::read_to_string(&vision_path)
             .with_context(|| format!("Failed to read vision document: {}", vision_path.display()))?;
 
@@ -148,7 +148,7 @@ impl GenesisEngine {
             match selection {
                 0 => {
                     // Accept - write to file
-                    let file_path = self.obsidian_path.join(&filename);
+                    let file_path = self.planning_path.join(&filename);
                     fs::write(&file_path, &content).with_context(|| {
                         format!("Failed to write document: {}", file_path.display())
                     })?;

@@ -1,7 +1,7 @@
 [project]
 name = "settle_mate"
 version = "0.1.0"
-obsidian_path = "/home/nullvektor/obsidian/work/settle_mate"
+obsidian_path = "/home/nullvektor/obsidian/projects/settle_mate"
 
 [structure]
 planning_dir = "01-PLANNING"
@@ -13,7 +13,7 @@ heuristics_file = ".nexus/gate-heuristics.json"
 strict_mode = true
 
 [obsidian]
-planning_path = "/home/nullvektor/obsidian/work/settle_mate"
+planning_path = "/home/nullvektor/obsidian/projects/settle_mate"
 
 [state]
 is_unlocked = false

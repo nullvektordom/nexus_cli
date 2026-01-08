@@ -213,14 +213,16 @@ Generate the Tech Stack document now. Remember:
                 r"
 # Tech Stack Context
 
-**Language**: {}
-**Framework**: {}
-**Database**: {}
-**Justification**: {}",
-                tech.language,
-                tech.framework,
-                tech.database.as_deref().unwrap_or("None"),
-                tech.justification
+**Stack Choices**: {}
+**Justification**: {}
+**Not Using**: {}
+**Dependencies**: {}
+**Dev Environment**: {}",
+                tech.stack,
+                tech.justification,
+                tech.not_using,
+                tech.dependencies,
+                tech.dev_environment
             )
         } else {
             String::new()
@@ -318,9 +320,9 @@ Generate the Architecture document now. Remember:
                 r"
 # Tech Stack
 
-**Language**: {}
-**Framework**: {}",
-                tech.language, tech.framework
+**Stack Choices**: {}
+**Justification**: {}",
+                tech.stack, tech.justification
             )
         } else {
             String::new()

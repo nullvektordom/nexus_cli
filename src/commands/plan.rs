@@ -15,7 +15,7 @@ use crate::genesis::GenesisEngine;
 use crate::llm::{LlmClient, LlmProvider};
 use anyhow::{Context, Result};
 use colored::Colorize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Execute the `plan --init` command - PROJECT GENESIS
 ///
@@ -45,7 +45,7 @@ pub fn execute_init(project_path: &Path) -> Result<()> {
     println!();
 
     // Verify 01-Problem-and-Vision.md exists
-    let vision_path = Path::new(&config.project.obsidian_path).join("01-Problem-and-Vision.md");
+    let vision_path = config.get_planning_path().join("01-Problem-and-Vision.md");
     if !vision_path.exists() {
         anyhow::bail!(
             "Vision document not found: {}\n\
@@ -111,8 +111,8 @@ pub fn execute_init(project_path: &Path) -> Result<()> {
         let llm_client = LlmClient::new(provider, api_key, llm_config.model.clone());
 
         // Create Genesis engine
-        let obsidian_path = PathBuf::from(&config.project.obsidian_path);
-        let engine = GenesisEngine::new(obsidian_path, llm_client)?;
+        let planning_path = config.get_planning_path();
+        let engine = GenesisEngine::new(planning_path, llm_client)?;
 
         // Execute Genesis
         engine.execute_genesis().await

@@ -5,8 +5,10 @@
 # IDE
 .vscode/
 .idea/
+
 .env
-/target
+.nexus/
+target/
 
 # OS
 .DS_Store

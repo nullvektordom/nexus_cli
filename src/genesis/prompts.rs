@@ -151,7 +151,7 @@ Content 4"#;
         assert_eq!(docs[0].0, "02-Scope-and-Boundaries.md");
         assert_eq!(docs[1].0, "03-Tech-Stack.md");
         assert_eq!(docs[2].0, "04-Architecture.md");
-        assert_eq!(docs[3].0, "05-MVP-Roadmap.md");
+        assert_eq!(docs[3].0, "05-MVP-Breakdown.md");
         assert!(docs[0].1.contains("Doc 1"));
     }
 }
