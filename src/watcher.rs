@@ -407,8 +407,8 @@ fn generate_dummy_embedding(_text: &str) -> Vec<f32> {
     // - OpenAI ada-002
     // - Sentence-BERT
     // - all-MiniLM-L6-v2
-    // For now, return a random vector of the correct size
-    vec![0.0; 1536]
+    // For now, return a random vector of the correct size (384 for all-MiniLM-L6-v2)
+    vec![0.0; 384]
 }
 
 /// Generate a unique point ID for a file chunk

@@ -8,7 +8,7 @@ use crate::embeddings::generate_embedding;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub const MEMORY_URL: &str = "http://100.105.8.97:6333";
+pub const MEMORY_URL: &str = "http://100.105.8.97:6334";  // gRPC port
 pub const COLLECTION_NAME: &str = "nexus_ledger";
 pub const VECTOR_SIZE: u64 = 384;
 
@@ -19,6 +19,7 @@ pub struct NexusMemory {
 impl NexusMemory {
     pub async fn connect() -> Result<Self> {
         let client = Qdrant::from_url(MEMORY_URL)
+            .skip_compatibility_check() // Disable version check for Tailscale/gRPC compatibility
             .build()
             .context("Failed to create Qdrant client for memory")?;
         
