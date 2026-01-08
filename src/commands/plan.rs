@@ -63,7 +63,7 @@ pub fn execute_init(project_path: &Path) -> Result<()> {
             "LLM not configured. Add [llm] section to nexus.toml:\n\n\
             [llm]\n\
             provider = \"gemini\"\n\
-            model = \"gemini-3-pro\"\n\
+            model = \"gemini-1.5-pro\"\n\
             enabled = true\n\n\
             Set your API key:\n\
             export GOGGLE_AI_STUDIO_API_KEY=\"your-key\""

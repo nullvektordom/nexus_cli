@@ -543,7 +543,108 @@ impl LlmClient {
         system_prompt: &str,
         user_prompt: &str,
     ) -> Result<(String, Option<String>)> {
-        self.complete_gemini_full(system_prompt, &[], None, user_prompt).await
+        // Use simple mode (no thinking) for structured output generation
+        self.complete_gemini_simple(system_prompt, user_prompt).await
+    }
+
+    /// Send a prompt with system message to Gemini API (no thinking mode)
+    /// This is used for structured output generation like Genesis documents
+    async fn complete_gemini_simple(
+        &self,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<(String, Option<String>)> {
+        #[derive(Serialize)]
+        struct GeminiRequest {
+            contents: Vec<GeminiContent>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            system_instruction: Option<GeminiContent>,
+        }
+
+        #[derive(Serialize)]
+        struct GeminiContent {
+            parts: Vec<GeminiPart>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            role: Option<String>,
+        }
+
+        #[derive(Serialize, Deserialize)]
+        struct GeminiPart {
+            text: String,
+        }
+
+        #[derive(Deserialize)]
+        struct GeminiResponse {
+            candidates: Vec<GeminiCandidate>,
+        }
+
+        #[derive(Deserialize)]
+        struct GeminiCandidate {
+            content: GeminiResponseContent,
+        }
+
+        #[derive(Deserialize)]
+        struct GeminiResponseContent {
+            parts: Vec<GeminiPart>,
+        }
+
+        let request = GeminiRequest {
+            contents: vec![GeminiContent {
+                parts: vec![GeminiPart {
+                    text: user_prompt.to_string(),
+                }],
+                role: Some("user".to_string()),
+            }],
+            system_instruction: if system_prompt.is_empty() {
+                None
+            } else {
+                Some(GeminiContent {
+                    parts: vec![GeminiPart {
+                        text: system_prompt.to_string(),
+                    }],
+                    role: None,
+                })
+            },
+        };
+
+        let url = format!(
+            "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+            self.model, self.api_key
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .header("content-type", "application/json")
+            .json(&request)
+            .send()
+            .await
+            .context("Failed to send request to Gemini API")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unable to read error response".to_string());
+            anyhow::bail!("Gemini API error ({status}): {error_text}");
+        }
+
+        let gemini_response: GeminiResponse = response
+            .json()
+            .await
+            .context("Failed to parse Gemini API response")?;
+
+        let candidate = gemini_response
+            .candidates
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("No candidates in Gemini response"))?;
+
+        let text = candidate.content.parts.first()
+            .map(|p| p.text.clone())
+            .ok_or_else(|| anyhow::anyhow!("No text in Gemini response"))?;
+
+        Ok((text, None))
     }
 }
 

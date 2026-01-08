@@ -30,70 +30,39 @@ CRITICAL REQUIREMENTS:
 DOCUMENT STRUCTURE:
 
 02-Scope-and-Boundaries.md:
-## MVP (Minimum Viable Product):
-[List of MVP features as bullet points]
+## Scope
+[What is included in the MVP - specific features and functionality]
 
-## Version 2 (NOT NOW - just document):
-[Future features to defer]
-
-## Never (things I will NOT build):
-[Features that would dilute focus]
-
-## Tech constraints:
-[Technical, time, or resource constraints]
+## Boundaries
+[What is explicitly excluded - features deferred or out of scope]
 
 ---NEXT_DOC---
 
-03-Architecture-Logic.md:
-## System Architecture:
-[High-level architecture description]
-
-## Core Components:
-[Key components and their responsibilities]
-
-## Data Flow:
-[How data moves through the system]
-
-## Key Design Decisions:
-[Important architectural decisions and rationale]
+03-Tech-Stack.md:
+## Tech Stack
+[Complete technology stack including:
+- Primary programming language and version
+- Frameworks and libraries
+- Database and data storage
+- Deployment platform
+- Development tools
+Each with justification based on Vision constraints]
 
 ---NEXT_DOC---
 
-04-Tech-Stack-Standard.md:
-## Language:
-[Primary programming language]
-
-## Framework/Library:
-[Framework or library]
-
-## Database (if needed):
-[Database choice or None]
-
-## Justification:
-[Justification for choices based on Vision constraints]
-
----NEXT_DOC---
-
-05-MVP-Roadmap.md:
-## Phase 1: Foundation
-[Setup and core infrastructure tasks]
-
-**Exit criteria:** [Measurable goal]
-
-## Phase 2: Core Features
-[Main feature implementation tasks]
-
-**Exit criteria:** [Measurable goal]
-
-## Phase 3: Polish & Release
-[Refinement and release preparation tasks]
-
-**Exit criteria:** [Measurable goal]"#;
+04-Architecture.md:
+## Architecture
+[System architecture including:
+- High-level system design
+- Core components and their responsibilities
+- Data flow and communication patterns
+- Key design decisions and rationale
+- Technology integration points]"#;
 
 /// Build the user prompt for Genesis
 pub fn build_genesis_user_prompt(vision: &VisionData) -> String {
     format!(
-        r#"Based on this vision, generate the complete foundational skeleton (Docs 02-05):
+        r#"Based on this vision, generate the complete foundational skeleton (Docs 02-04):
 
 # Vision Document (01-Problem-and-Vision.md)
 
@@ -111,12 +80,13 @@ pub fn build_genesis_user_prompt(vision: &VisionData) -> String {
 
 ---
 
-Generate all four planning documents now, separated by ---NEXT_DOC---. Remember:
+Generate all three planning documents now, separated by ---NEXT_DOC---. Remember:
 - This is PROJECT GENESIS, not a task or feature
 - Focus on architectural synthesis
 - Be specific and concrete
 - No placeholders or TODOs
-- Justify all technical decisions"#,
+- Justify all technical decisions
+- Use EXACTLY the headers specified in the document structure above"#,
         vision.problem, vision.solution, vision.success_criteria, vision.anti_vision
     )
 }
@@ -133,9 +103,8 @@ pub fn parse_genesis_response(response: &str) -> Vec<(String, String)> {
 
     let filenames = vec![
         "02-Scope-and-Boundaries.md",
-        "03-Architecture-Logic.md",
-        "04-Tech-Stack-Standard.md",
-        "05-MVP-Roadmap.md",
+        "03-Tech-Stack.md",
+        "04-Architecture.md",
     ];
 
     documents
@@ -182,14 +151,13 @@ Content 1
 Content 2
 ---NEXT_DOC---
 # Doc 3
-Content 3
----NEXT_DOC---
-# Doc 4
-Content 4"#;
+Content 3"#;
 
         let docs = parse_genesis_response(response);
-        assert_eq!(docs.len(), 4);
+        assert_eq!(docs.len(), 3);
         assert_eq!(docs[0].0, "02-Scope-and-Boundaries.md");
+        assert_eq!(docs[1].0, "03-Tech-Stack.md");
+        assert_eq!(docs[2].0, "04-Architecture.md");
         assert!(docs[0].1.contains("Doc 1"));
     }
 }
