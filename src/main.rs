@@ -36,6 +36,9 @@ enum Commands {
         /// Mode: "sprint" (default) or "adhoc"
         #[arg(long, default_value = "sprint")]
         mode: String,
+        /// Initialize as a full project (Git repo + Obsidian vault with planning docs)
+        #[arg(long)]
+        project: bool,
     },
     /// Check if planning documents are complete and ready
     Gate {
@@ -72,8 +75,8 @@ fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Init { project_name, mode } => {
-            if let Err(e) = commands::init::execute(&project_name, &mode) {
+        Commands::Init { project_name, mode, project } => {
+            if let Err(e) = commands::init::execute(&project_name, &mode, project) {
                 eprintln!("{e}");
                 std::process::exit(1);
             }

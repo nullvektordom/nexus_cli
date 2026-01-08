@@ -262,6 +262,7 @@ fn execute_command(
             }
             Ok(())
         }
+        "init" => execute_init_command(args),
         _ => {
             // Check if LLM is enabled and context is enabled for natural language processing
             let is_context_enabled = *context_enabled.lock().unwrap();
@@ -306,6 +307,10 @@ fn print_help() {
     println!(
         "  {}          Show current active project and paths",
         "pwd".cyan()
+    );
+    println!(
+        "  {} <name> [--project] Initialize a new project",
+        "init".cyan()
     );
     println!();
     println!(
@@ -1273,12 +1278,12 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
         None
     };
 
-    // Run async context retrieval and LLM call
+    // Run async context retrieval to build the prompt
     let runtime = tokio::runtime::Runtime::new()?;
-    let result = runtime.block_on(async {
+    let prompt = runtime.block_on(async {
         // Retrieve architectural decisions
         let previous_decisions = memory.retrieve_context(input).await.unwrap_or_default();
-        
+
         // Get active context (architecture + sprint)
         let context = if let Some(ref url) = qdrant_url {
             get_active_context(input, project_id, url, &obsidian_path, &config).await?
@@ -1334,15 +1339,27 @@ fn execute_llm_query(input: &str, state: &NexusState) -> Result<()> {
             println!("  {} Included {} previous conversation turns", "✓".green(), history.len());
         }
 
-        // Create LLM client
-        let provider_enum = LlmProvider::from_str(&llm_config.provider)
-            .ok_or_else(|| anyhow::anyhow!("Invalid LLM provider: {}", llm_config.provider))?;
+        Ok::<String, anyhow::Error>(prompt)
+    })?;
 
-        let client = LlmClient::new(provider_enum.clone(), api_key, llm_config.model.clone());
+    // SAFETY GATE: Show prompt and ask for confirmation
+    let confirmed = crate::llm::confirm_llm_prompt(&prompt, "Natural language query")?;
+    if !confirmed {
+        return Ok(()); // User cancelled
+    }
 
-        println!();
-        println!("{}", "🤖 Querying LLM...".cyan());
-        println!();
+    // Create LLM client
+    let provider_enum = LlmProvider::from_str(&llm_config.provider)
+        .ok_or_else(|| anyhow::anyhow!("Invalid LLM provider: {}", llm_config.provider))?;
+
+    let client = LlmClient::new(provider_enum.clone(), api_key, llm_config.model.clone());
+
+    println!();
+    println!("{}", "🤖 Querying LLM...".cyan());
+    println!();
+
+    // Send to LLM in async block
+    let result = runtime.block_on(async {
 
         // Send to LLM
         let (response, thought_signature) = if provider_enum == LlmProvider::Gemini {
@@ -1428,6 +1445,45 @@ fn find_model_paths() -> (String, String) {
 /// # Arguments
 /// * `state` - Current shell session state
 /// * `args` - Command arguments (e.g., ["start"] or ["done"])
+/// Execute the init command from REPL
+fn execute_init_command(args: &[&str]) -> Result<()> {
+    if args.is_empty() {
+        anyhow::bail!("Usage: init <project-name> [--mode sprint|adhoc] [--project]");
+    }
+
+    let project_name = args[0];
+    let mut mode = "sprint";
+    let mut is_full_project = false;
+
+    // Parse flags
+    let mut i = 1;
+    while i < args.len() {
+        match args[i] {
+            "--mode" => {
+                if i + 1 < args.len() {
+                    mode = args[i + 1];
+                    i += 2;
+                } else {
+                    anyhow::bail!("--mode requires a value (sprint or adhoc)");
+                }
+            }
+            "--project" => {
+                is_full_project = true;
+                i += 1;
+            }
+            _ => {
+                anyhow::bail!("Unknown flag: {}", args[i]);
+            }
+        }
+    }
+
+    // Call the init module's execute function
+    crate::commands::init::execute(project_name, mode, is_full_project)
+        .map_err(|e| anyhow::anyhow!("{}", e))?;
+
+    Ok(())
+}
+
 fn execute_task_command(state: &NexusState, args: &[&str]) -> Result<()> {
     let project_path = state
         .get_active_repo_path()

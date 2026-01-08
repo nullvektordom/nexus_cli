@@ -575,6 +575,18 @@ Please regenerate the document incorporating the user's feedback while maintaini
             feedback
         );
 
+        // SAFETY GATE: Show combined prompt and ask for confirmation
+        let full_refinement_prompt = format!(
+            "SYSTEM:\n{}\n\nUSER:\n{}",
+            base_prompt.system_prompt(),
+            refinement_prompt
+        );
+        let context_desc = format!("Catalyst refinement - {:?}", doc_type);
+        let confirmed = crate::llm::confirm_llm_prompt(&full_refinement_prompt, &context_desc)?;
+        if !confirmed {
+            anyhow::bail!("User cancelled refinement request");
+        }
+
         println!("{}", "  Calling LLM for refinement...".dimmed());
 
         // Call LLM with refinement prompt
@@ -782,6 +794,18 @@ Please regenerate the document incorporating the user's feedback while maintaini
             DocumentType::Architecture => PromptTemplate::for_architecture(context),
             DocumentType::MvpBreakdown => PromptTemplate::for_mvp_breakdown(context),
         };
+
+        // SAFETY GATE: Show combined prompt and ask for confirmation
+        let full_prompt = format!(
+            "SYSTEM:\n{}\n\nUSER:\n{}",
+            prompt.system_prompt(),
+            prompt.user_prompt()
+        );
+        let context_desc = format!("Catalyst - {:?}", doc_type);
+        let confirmed = crate::llm::confirm_llm_prompt(&full_prompt, &context_desc)?;
+        if !confirmed {
+            anyhow::bail!("User cancelled LLM request");
+        }
 
         println!("{}", "  Calling LLM...".dimmed());
 

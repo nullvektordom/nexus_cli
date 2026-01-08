@@ -5,12 +5,17 @@ use std::path::{Path, PathBuf};
 
 /// Execute the init command
 /// Creates a new project folder with template files and nexus.toml
-pub fn execute(project_name: &str, mode: &str) -> Result<(), String> {
+pub fn execute(project_name: &str, mode: &str, is_full_project: bool) -> Result<(), String> {
     // Validate mode
     if mode != "sprint" && mode != "adhoc" {
         return Err(format!(
             "Invalid mode '{mode}'. Must be 'sprint' or 'adhoc'."
         ));
+    }
+
+    // If --project flag is set, use the God Move initialization
+    if is_full_project {
+        return init_full_project(project_name, mode);
     }
     let project_path = PathBuf::from(project_name);
 
@@ -229,6 +234,341 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
             fs::copy(&src_path, &dst_path)?;
         }
     }
+
+    Ok(())
+}
+
+/// THE "GOD MOVE" - Initialize a complete project from scratch
+/// This prevents the "Moment 22" deadlock by setting up everything correctly from day one
+fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
+    use colored::Colorize;
+
+    println!("{}", "╔═══════════════════════════════════════════════════════╗".cyan());
+    println!("{}", "║   🏗️  NEXUS PROJECT BOOTSTRAP - THE GOD MOVE       ║".cyan());
+    println!("{}", "╚═══════════════════════════════════════════════════════╝".cyan());
+    println!();
+
+    // Step 1: Get current directory as project root
+    let current_dir = std::env::current_dir()
+        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+
+    println!("{} {}", "📂 Project Root:".bold(), current_dir.display());
+
+    // Step 2: Ask for Obsidian vault location
+    println!();
+    println!("{}", "📝 Obsidian Vault Configuration".bold());
+    println!("   Where should the planning documents be stored?");
+
+    let home_dir = std::env::var("HOME")
+        .map_err(|_| "Could not determine HOME directory".to_string())?;
+
+    let default_vault = PathBuf::from(&home_dir)
+        .join("obsidian")
+        .join("work")
+        .join(project_name);
+
+    println!("   Default: {}", default_vault.display().to_string().dimmed());
+    println!("   Press Enter to use default, or type custom path:");
+
+    let mut vault_input = String::new();
+    io::stdin()
+        .read_line(&mut vault_input)
+        .map_err(|e| format!("Failed to read input: {e}"))?;
+
+    let vault_path = if vault_input.trim().is_empty() {
+        default_vault
+    } else {
+        PathBuf::from(vault_input.trim())
+    };
+
+    println!();
+    println!("{} Initializing Git repository...", "1/5".cyan().bold());
+
+    // Initialize Git repository in current directory
+    let git_status = std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(&current_dir)
+        .output()
+        .map_err(|e| format!("Failed to execute git init: {e}"))?;
+
+    if !git_status.status.success() {
+        return Err("Failed to initialize Git repository".to_string());
+    }
+
+    println!("    {} Git repository initialized", "✓".green());
+
+    println!();
+    println!("{} Creating .nexus/ directory...", "2/5".cyan().bold());
+
+    // Create .nexus directory for local configs
+    let nexus_dir = current_dir.join(".nexus");
+    fs::create_dir_all(&nexus_dir)
+        .map_err(|e| format!("Failed to create .nexus directory: {e}"))?;
+
+    println!("    {} .nexus/ directory created", "✓".green());
+
+    // Create bootstrap heuristics
+    let heuristics_path = nexus_dir.join("gate-heuristics.json");
+    crate::heuristics::create_bootstrap_heuristics(&heuristics_path)
+        .map_err(|e| format!("Failed to create bootstrap heuristics: {e}"))?;
+
+    println!("    {} Bootstrap heuristics created", "✓".green());
+
+    println!();
+    println!("{} Scaffolding Obsidian vault...", "3/5".cyan().bold());
+
+    // Create Obsidian vault structure
+    fs::create_dir_all(&vault_path)
+        .map_err(|e| format!("Failed to create Obsidian vault: {e}"))?;
+
+    println!("    {} Vault directory: {}", "✓".green(), vault_path.display());
+
+    // Create planning documents (01-05)
+    create_planning_documents(&vault_path)?;
+
+    println!();
+    println!("{} Creating nexus.toml...", "4/5".cyan().bold());
+
+    // Create nexus.toml
+    let config = NexusConfig::new(
+        project_name.to_string(),
+        vault_path.to_string_lossy().to_string(),
+    );
+
+    let mut config_toml = config
+        .to_toml()
+        .map_err(|e| format!("Failed to serialize config: {e}"))?;
+
+    // Override heuristics_file path to use stable location
+    config_toml = config_toml.replace(
+        "heuristics_file = \"Gate-Heuristics.json\"",
+        "heuristics_file = \".nexus/gate-heuristics.json\""
+    );
+
+    let config_path = current_dir.join("nexus.toml");
+    fs::write(&config_path, config_toml)
+        .map_err(|e| format!("Failed to write nexus.toml: {e}"))?;
+
+    println!("    {} nexus.toml created", "✓".green());
+
+    println!();
+    println!("{} Creating .gitignore...", "5/5".cyan().bold());
+
+    // Create .gitignore
+    let gitignore_content = "# Nexus CLI
+.nexus_history.json
+.nexus_session.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+";
+
+    fs::write(current_dir.join(".gitignore"), gitignore_content)
+        .map_err(|e| format!("Failed to create .gitignore: {e}"))?;
+
+    println!("    {} .gitignore created", "✓".green());
+
+    println!();
+    println!("{}", "╔═══════════════════════════════════════════════════════╗".green());
+    println!("{}", "║       ✅ PROJECT INITIALIZED SUCCESSFULLY!           ║".green());
+    println!("{}", "╚═══════════════════════════════════════════════════════╝".green());
+    println!();
+    println!("{}", "🎯 Your project is ready!".bold());
+    println!();
+    println!("   {} {}", "Git Repo:".bold(), current_dir.display());
+    println!("   {} {}", "Obsidian Vault:".bold(), vault_path.display());
+    println!("   {} .nexus/gate-heuristics.json", "Heuristics:".bold());
+    println!();
+    println!("{}", "📋 Next steps:".bold());
+    println!("   1. Open {} in Obsidian", vault_path.display());
+    println!("   2. Fill out {}", "01-Problem-and-Vision.md".cyan());
+    println!("   3. Run {} to verify planning", "nexus gate .".cyan());
+    println!("   4. Run {} to generate CLAUDE.md", "nexus unlock .".cyan());
+    println!();
+
+    Ok(())
+}
+
+/// Create the 01-05 planning documents in the Obsidian vault
+fn create_planning_documents(vault_path: &Path) -> Result<(), String> {
+    use colored::Colorize;
+
+    // Create 01-PLANNING directory
+    let planning_dir = vault_path;
+    fs::create_dir_all(planning_dir)
+        .map_err(|e| format!("Failed to create planning directory: {e}"))?;
+
+    // Document 1: Problem and Vision
+    let doc1 = r#"# Problem and Vision
+
+## Problem Statement
+*What problem are we solving? Who experiences this problem?*
+
+
+
+## Vision
+*What does success look like? What's the ideal future state?*
+
+
+
+## Target Users
+*Who will use this? What are their needs?*
+
+
+
+## Success Metrics
+*How will we measure success?*
+
+
+
+---
+*Generated by Nexus CLI - Edit this document to define your project vision*
+"#;
+
+    fs::write(planning_dir.join("01-Problem-and-Vision.md"), doc1)
+        .map_err(|e| format!("Failed to write 01-Problem-and-Vision.md: {e}"))?;
+
+    println!("    {} 01-Problem-and-Vision.md", "✓".green());
+
+    // Document 2: Scope and Boundaries
+    let doc2 = r#"# Scope and Boundaries
+
+## In Scope
+*What will we build? List features and capabilities that ARE included.*
+
+
+
+## Out of Scope
+*What will we NOT build? List features and capabilities that are explicitly excluded.*
+
+
+
+## Constraints
+*Technical, time, or resource constraints we must work within.*
+
+
+
+## Assumptions
+*What are we assuming to be true?*
+
+
+
+---
+*Generated by Nexus CLI - Define clear boundaries for your project*
+"#;
+
+    fs::write(planning_dir.join("02-Scope-and-Boundaries.md"), doc2)
+        .map_err(|e| format!("Failed to write 02-Scope-and-Boundaries.md: {e}"))?;
+
+    println!("    {} 02-Scope-and-Boundaries.md", "✓".green());
+
+    // Document 3: Architecture Logic
+    let doc3 = r#"# Architecture and Logic
+
+## System Architecture
+*High-level architecture diagram and description.*
+
+
+
+## Core Components
+*Key components and their responsibilities.*
+
+
+
+## Data Flow
+*How does data move through the system?*
+
+
+
+## Key Design Decisions
+*Important architectural decisions and their rationale.*
+
+
+
+---
+*Generated by Nexus CLI - Document your technical architecture*
+"#;
+
+    fs::write(planning_dir.join("03-Architecture-Logic.md"), doc3)
+        .map_err(|e| format!("Failed to write 03-Architecture-Logic.md: {e}"))?;
+
+    println!("    {} 03-Architecture-Logic.md", "✓".green());
+
+    // Document 4: Tech Stack and Standards
+    let doc4 = r#"# Tech Stack and Standards
+
+## Technology Stack
+*Languages, frameworks, libraries, and tools.*
+
+
+
+## Coding Standards
+*Code style, naming conventions, best practices.*
+
+
+
+## Development Environment
+*Required tools and setup for development.*
+
+
+
+## Testing Strategy
+*Unit tests, integration tests, E2E tests.*
+
+
+
+---
+*Generated by Nexus CLI - Define your technical standards*
+"#;
+
+    fs::write(planning_dir.join("04-Tech-Stack-Standard.md"), doc4)
+        .map_err(|e| format!("Failed to write 04-Tech-Stack-Standard.md: {e}"))?;
+
+    println!("    {} 04-Tech-Stack-Standard.md", "✓".green());
+
+    // Document 5: MVP Roadmap
+    let doc5 = r#"# MVP Roadmap
+
+## MVP Features
+*Minimum viable product - what's the smallest thing that delivers value?*
+
+
+
+## Implementation Phases
+*Break down the work into phases or sprints.*
+
+
+
+## Milestones
+*Key checkpoints and deliverables.*
+
+
+
+## Risk Assessment
+*What could go wrong? Mitigation strategies?*
+
+
+
+---
+*Generated by Nexus CLI - Plan your MVP and roadmap*
+"#;
+
+    fs::write(planning_dir.join("05-MVP-Roadmap.md"), doc5)
+        .map_err(|e| format!("Failed to write 05-MVP-Roadmap.md: {e}"))?;
+
+    println!("    {} 05-MVP-Roadmap.md", "✓".green());
+
+    // Create 00-MANAGEMENT directory for task tracking
+    let management_dir = vault_path.join("00-MANAGEMENT");
+    fs::create_dir_all(&management_dir)
+        .map_err(|e| format!("Failed to create 00-MANAGEMENT directory: {e}"))?;
+
+    println!("    {} 00-MANAGEMENT/ directory", "✓".green());
 
     Ok(())
 }
