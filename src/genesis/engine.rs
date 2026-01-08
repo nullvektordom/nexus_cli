@@ -3,7 +3,7 @@
 //! Core engine for PROJECT GENESIS - generates foundational planning documents.
 
 use crate::catalyst::engine::parse_vision_document;
-use crate::genesis::{build_genesis_user_prompt, parse_genesis_response, GENESIS_SYSTEM_PROMPT};
+use crate::genesis::{build_genesis_user_prompt, parse_genesis_response, get_genesis_system_prompt};
 use crate::llm::LlmClient;
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -63,6 +63,7 @@ impl GenesisEngine {
 
         // Build prompt
         let user_prompt = build_genesis_user_prompt(&vision);
+        let system_prompt = get_genesis_system_prompt();
 
         println!("{}", "═══════════════════════════════════════".cyan());
         println!("{}", "  Phase 2: LLM Generation".cyan().bold());
@@ -70,7 +71,7 @@ impl GenesisEngine {
         println!();
 
         // SAFETY GATE: Confirm LLM request
-        let full_prompt = format!("SYSTEM:\n{}\n\nUSER:\n{}", GENESIS_SYSTEM_PROMPT, user_prompt);
+        let full_prompt = format!("SYSTEM:\n{}\n\nUSER:\n{}", system_prompt, user_prompt);
         let confirmed = crate::llm::confirm_llm_prompt(&full_prompt, "Project Genesis")?;
         if !confirmed {
             anyhow::bail!("User cancelled Genesis request");
@@ -83,7 +84,7 @@ impl GenesisEngine {
         // Call LLM
         let response = self
             .llm_client
-            .complete_with_system(GENESIS_SYSTEM_PROMPT, &user_prompt)
+            .complete_with_system(&system_prompt, &user_prompt)
             .await
             .with_context(|| {
                 "Failed to generate documents via LLM. Possible causes:\n\

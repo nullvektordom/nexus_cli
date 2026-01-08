@@ -143,8 +143,8 @@ fn enforce_planning_phase(project_path: &Path) -> Result<()> {
         .with_context(|| "Failed to parse heuristics JSON")?;
 
     // Check for active task capsule
-    if let Some(active_capsule) = heuristics.get("active_capsule") {
-        if !active_capsule.is_null() {
+    if let Some(active_capsule) = heuristics.get("active_capsule") && 
+        !active_capsule.is_null() {
             anyhow::bail!(
                 "GENESIS GUARDRAIL VIOLATION\n\
                 \n\
@@ -165,7 +165,6 @@ fn enforce_planning_phase(project_path: &Path) -> Result<()> {
                 active_capsule
             );
         }
-    }
 
     Ok(())
 }

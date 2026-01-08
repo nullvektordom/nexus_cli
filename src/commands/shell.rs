@@ -1517,7 +1517,7 @@ fn find_model_paths() -> (String, String) {
 /// # Arguments
 /// * `state` - Current shell session state
 /// * `args` - Command arguments (e.g., ["start"] or ["done"])
-/// Execute the init command from REPL
+///   Execute the init command from REPL
 fn execute_init_command(args: &[&str]) -> Result<()> {
     if args.is_empty() {
         anyhow::bail!("Usage: init <project-name> [--mode sprint|adhoc] [--project]");

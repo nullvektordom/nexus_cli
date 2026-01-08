@@ -141,10 +141,8 @@ pub fn load_heuristics_with_fallback(
     }
 
     // Try legacy path if provided
-    if let Some(legacy) = legacy_path {
-        if legacy.exists() {
-            return load_heuristics(legacy);
-        }
+    if let Some(legacy) = legacy_path && legacy.exists() {
+        return load_heuristics(legacy);
     }
 
     // Neither exists - create bootstrap at stable path

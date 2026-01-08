@@ -222,37 +222,29 @@ fn validate_planning_phase(
         // Only use specific file rules if heuristics has required headers
         let use_specific_file_rules = !heuristics.required_headers.is_empty();
 
-        let file_rules: Vec<(&str, Vec<String>)> = if use_specific_file_rules {
-            vec![
-                (
-                    "01-Problem-and-Vision.md",
-                    vec!["Problem".to_string(), "Vision".to_string()],
-                ),
-                (
-                    "02-Scope-and-Boundaries.md",
-                    vec!["Scope".to_string(), "Boundaries".to_string()],
-                ),
-                (
-                    "03-Tech-Stack.md",
-                    vec!["Tech Stack".to_string()],
-                ),
-                (
-                    "04-Architecture.md",
-                    vec!["Architecture".to_string()],
-                ),
-            ]
+        let file_rules: Vec<(&str, Vec<String>, usize)> = if use_specific_file_rules {
+            crate::schema::planning::PLANNING_DOCUMENTS
+                .iter()
+                .map(|doc| {
+                    (
+                        doc.filename,
+                        doc.required_headers.iter().map(|s| s.to_string()).collect(),
+                        doc.min_word_count,
+                    )
+                })
+                .collect()
         } else {
             vec![] // No specific file rules if heuristics doesn't require headers
         };
 
         // Check if structured files exist - if any exist, require all
-        let structured_files_exist = use_specific_file_rules && file_rules.iter().any(|(name, _)| {
+        let structured_files_exist = use_specific_file_rules && file_rules.iter().any(|(name, _, _)| {
             planning_dir.join(name).exists()
         });
 
         if structured_files_exist {
             // Validate structured planning files
-            for (file_name, required_headers) in file_rules {
+            for (file_name, required_headers, doc_min_word_count) in file_rules {
                 let file_path = planning_dir.join(file_name);
 
                 if !file_path.exists() {
@@ -300,7 +292,7 @@ fn validate_planning_phase(
                 match validate_planning_document_with_headers(
                     &file_path,
                     &required_headers,
-                    min_word_count,
+                    doc_min_word_count,
                     &illegal_strings,
                 ) {
                     Ok(result) => {

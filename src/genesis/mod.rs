@@ -10,4 +10,4 @@ pub mod engine;
 pub mod prompts;
 
 pub use engine::GenesisEngine;
-pub use prompts::{build_genesis_user_prompt, parse_genesis_response, GENESIS_SYSTEM_PROMPT};
+pub use prompts::{build_genesis_user_prompt, parse_genesis_response, get_genesis_system_prompt};
