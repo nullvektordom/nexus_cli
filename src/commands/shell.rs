@@ -188,7 +188,7 @@ fn print_banner(state: &NexusState) -> Result<()> {
     println!();
     println!(
         "{}",
-        "Available commands: use, gate, unlock, sprint, catalyst, status, context, help, exit".dimmed()
+        "Available commands: use, gate, unlock, sprint, plan, catalyst, status, context, help, exit".dimmed()
     );
     println!("{}", "Type 'help' for more information.".dimmed());
     println!(
@@ -236,6 +236,7 @@ fn execute_command(
         "done" => execute_task_command(state, &["done"]),
         "status" => execute_status(state),
         "catalyst" => execute_catalyst(state, args),
+        "plan" => execute_plan(state, args),
         "watch" => execute_watch(state, watcher, watcher_enabled),
         "unwatch" => execute_unwatch(watcher, watcher_enabled),
         "why" => execute_why(state, last_gate_error),
@@ -332,9 +333,11 @@ fn print_help() {
     println!("  {}        Clear the screen", "clear".cyan());
     println!("  {}  | {}  Exit the shell", "exit".cyan(), "quit".cyan());
     println!();
-    println!("{}", "Planning Catalyst:".bold().underline());
+    println!("{}", "Planning & Genesis:".bold().underline());
     println!();
-    println!("  {} <cmd>  AI-powered planning document generation", "catalyst".cyan());
+    println!("  {} <init>      PROJECT GENESIS - Generate foundational docs (02-05)", "plan".cyan());
+    println!();
+    println!("  {} <cmd>  AI-powered task-scoped document generation", "catalyst".cyan());
     println!("    {} scope      Generate scope document", "catalyst".dimmed());
     println!("    {} stack      Generate tech stack document", "catalyst".dimmed());
     println!("    {} arch       Generate architecture document", "catalyst".dimmed());
@@ -685,6 +688,61 @@ fn print_catalyst_help() {
     println!();
     println!("  {} With reasoning display:", "Option 3:".bold());
     println!("    Run 'catalyst generate --show-reasoning' to see model's thinking");
+    println!();
+}
+
+/// Execute the plan command - PROJECT GENESIS
+fn execute_plan(state: &NexusState, args: &[&str]) -> Result<()> {
+    let repo_path = state
+        .get_active_repo_path()
+        .ok_or_else(|| anyhow::anyhow!("No active project. Use 'use <project>' first."))?;
+
+    if args.is_empty() {
+        print_plan_help();
+        return Ok(());
+    }
+
+    let subcommand = args[0].to_lowercase();
+    match subcommand.as_str() {
+        "init" | "--init" => {
+            println!("{}", "Running project genesis...".dimmed());
+            crate::commands::plan::execute_init(&repo_path)
+        }
+        "help" => {
+            print_plan_help();
+            Ok(())
+        }
+        _ => {
+            anyhow::bail!("Unknown plan command: '{subcommand}'. Use 'plan help' for usage.")
+        }
+    }
+}
+
+/// Print plan-specific help
+fn print_plan_help() {
+    println!("{}", "Project Genesis - Foundation Generator".bold().underline());
+    println!();
+    println!("{}", "Commands:".bold());
+    println!("  {} init      Generate all foundational documents (02-05)", "plan".cyan());
+    println!("  {} help      Show this help message", "plan".cyan());
+    println!();
+    println!("{}", "What is Project Genesis?".bold());
+    println!("  Genesis creates the architectural foundation for brand new projects.");
+    println!("  It transforms your 01-Problem-and-Vision.md into a complete planning skeleton:");
+    println!("    • 02-Scope-and-Boundaries.md");
+    println!("    • 03-Architecture-Logic.md");
+    println!("    • 04-Tech-Stack-Standard.md");
+    println!("    • 05-MVP-Roadmap.md");
+    println!();
+    println!("{}", "Prerequisites:".bold());
+    println!("  • Complete 01-Problem-and-Vision.md manually");
+    println!("  • No active Task Capsule (Genesis vs Task separation)");
+    println!("  • Configure LLM in nexus.toml ([llm] section)");
+    println!("  • Set GOGGLE_AI_STUDIO_API_KEY environment variable");
+    println!();
+    println!("{}", "Genesis vs Catalyst:".dimmed());
+    println!("  • {} Creates architectural foundation (NEW projects)", "Genesis:".bold());
+    println!("  • {} Task-scoped generation (features/bugs)", "Catalyst:".bold());
     println!();
 }
 
