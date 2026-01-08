@@ -14,6 +14,7 @@ mod history;
 mod llm;
 mod memory;
 mod planning;
+mod schema;
 mod scaffolding;
 mod session;
 mod state;

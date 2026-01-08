@@ -9,7 +9,7 @@ use std::path::Path;
 /// Execute the diagnose command - check LLM setup
 pub fn execute(project_path: &Path) -> Result<()> {
     println!("{}", "╔═══════════════════════════════════════════════════════╗".cyan());
-    println!("{}", "║   🔍 Nexus LLM Diagnostics                        ║".cyan());
+    println!("{}", "║   🔍 Nexus LLM Diagnostics                            ║".cyan());
     println!("{}", "╚═══════════════════════════════════════════════════════╝".cyan());
     println!();
 
@@ -99,7 +99,7 @@ pub fn execute(project_path: &Path) -> Result<()> {
             println!("    export {}=\"your-key-here\"", env_var.yellow());
             println!("  Or add it to nexus.toml:");
             println!("    {}", "[llm]".yellow());
-            println!("    {}", format!("api_key = \"your-key\"").yellow());
+            println!("    {}", "api_key = \"your-key\"".yellow());
             return Ok(());
         }
     }

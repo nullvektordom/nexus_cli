@@ -90,14 +90,16 @@ pub struct ScopeData {
 /// Structured data extracted from the tech stack document (03-Tech-Stack.md)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TechStackData {
-    /// Primary programming language
-    pub language: String,
-    /// Framework or library
-    pub framework: String,
-    /// Database (if applicable)
-    pub database: Option<String>,
+    /// Stack choices (frontend, backend, database, hosting)
+    pub stack: String,
     /// Justification for choices
     pub justification: String,
+    /// What will NOT be used
+    pub not_using: String,
+    /// Important dependencies
+    pub dependencies: String,
+    /// Development environment
+    pub dev_environment: String,
 }
 
 /// Structured data extracted from the architecture document (04-Architecture.md)

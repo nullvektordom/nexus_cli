@@ -52,16 +52,17 @@ fn get_validation_requirements(doc_type: DocumentType) -> (Vec<String>, usize) {
                 "Never (things I will NOT build):".to_string(),
                 "Tech constraints:".to_string(),
             ],
-            50, // minimum word count per section
+            15, // minimum word count per section
         ),
         DocumentType::TechStack => (
             vec![
-                "Language:".to_string(),
-                "Framework/Library:".to_string(),
-                "Database (if needed):".to_string(),
-                "Justification:".to_string(),
+                "Stack (force yourself to choose NOW):".to_string(),
+                "Why these choices?".to_string(),
+                "What I will NOT use:".to_string(),
+                "Dependencies (important ones):".to_string(),
+                "Development environment:".to_string(),
             ],
-            30,
+            15,
         ),
         DocumentType::Architecture => (
             vec![
@@ -70,13 +71,15 @@ fn get_validation_requirements(doc_type: DocumentType) -> (Vec<String>, usize) {
                 "Flow (user journey):".to_string(),
                 "Critical technical decisions:".to_string(),
             ],
-            30,
+            15,
         ),
         DocumentType::MvpBreakdown => (
             vec![
-                "Sprint 0:".to_string(),
+                "Sprint 1:".to_string(),
+                "Sprint 2:".to_string(),
+                "Definition of Done (each sprint):".to_string(),
             ],
-            30,
+            15,
         ),
     }
 }

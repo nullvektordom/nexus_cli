@@ -17,7 +17,12 @@
 - [ ] Task 2
 **Exit criteria:** [Concrete measurable goal]
 
-[Max 5 sprints for MVP]
+## Sprint 3 (optional): [Feature name]
+- [ ] Task 1
+- [ ] Task 2
+**Exit criteria:** [Concrete measurable goal]
+
+[Add more sprints as needed - minimum of 2 required]
 
 ## Definition of Done (each sprint):
 - [ ] Builds without errors
@@ -26,4 +31,4 @@
 - [ ] Session log updated
 
 ---
-✅ Done when: MVP divided into max 5 sprints + each has exit criteria
+✅ Done when: MVP divided into minimum 2 sprints (more acceptable) + each has exit criteria
