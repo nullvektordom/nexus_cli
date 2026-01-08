@@ -1037,17 +1037,24 @@ fn parse_tech_stack_document(content: &str) -> Result<crate::catalyst::generator
     let sections = extract_sections(content);
 
     Ok(crate::catalyst::generator::TechStackData {
-        language: sections
-            .get("Language:")
+        stack: sections
+            .get("Stack (force yourself to choose NOW):")
             .cloned()
             .unwrap_or_default(),
-        framework: sections
-            .get("Framework/Library:")
-            .cloned()
-            .unwrap_or_default(),
-        database: sections.get("Database (if needed):").cloned(),
         justification: sections
-            .get("Justification:")
+            .get("Why these choices?")
+            .cloned()
+            .unwrap_or_default(),
+        not_using: sections
+            .get("What I will NOT use:")
+            .cloned()
+            .unwrap_or_default(),
+        dependencies: sections
+            .get("Dependencies (important ones):")
+            .cloned()
+            .unwrap_or_default(),
+        dev_environment: sections
+            .get("Development environment:")
             .cloned()
             .unwrap_or_default(),
     })

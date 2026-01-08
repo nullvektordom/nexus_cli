@@ -64,15 +64,12 @@ pub fn execute(project_path: &Path) -> Result<()> {
     println!();
 
     // Phase 3: Resolve Planning Path
-    let planning_path = config.get_planning_path();
-    let planning_dir = planning_path.join(&config.structure.planning_dir);
+    let planning_dir = config.get_planning_path();
 
     if !planning_dir.exists() {
         anyhow::bail!(
-            "Planning directory not found: {}\n  Expected: {}/{}",
-            planning_dir.display(),
-            planning_path.display(),
-            config.structure.planning_dir
+            "Planning directory not found: {}",
+            planning_dir.display()
         );
     }
 

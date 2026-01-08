@@ -34,14 +34,13 @@ impl Default for GateHeuristics {
     /// Provides hardcoded fallback values matching Gate-Heuristics.json
     fn default() -> Self {
         Self {
-            min_section_length: 20,
+            min_section_length: 15,
             required_headers: vec![
-                "Problem".to_string(),
-                "Vision".to_string(),
-                "Scope".to_string(),
-                "Boundaries".to_string(),
-                "Tech Stack".to_string(),
-                "Architecture".to_string(),
+                "My problem (personal):".to_string(),
+                "MVP (Minimum Viable Product):".to_string(),
+                "Stack (force yourself to choose NOW):".to_string(),
+                "Folder structure:".to_string(),
+                "Definition of Done (each sprint):".to_string(),
             ],
             illegal_strings: vec![
                 "TODO".to_string(),
@@ -141,10 +140,8 @@ pub fn load_heuristics_with_fallback(
     }
 
     // Try legacy path if provided
-    if let Some(legacy) = legacy_path {
-        if legacy.exists() {
-            return load_heuristics(legacy);
-        }
+    if let Some(legacy) = legacy_path && legacy.exists() {
+        return load_heuristics(legacy);
     }
 
     // Neither exists - create bootstrap at stable path
@@ -164,13 +161,13 @@ mod tests {
     fn test_default_heuristics() {
         let heuristics = GateHeuristics::default();
 
-        assert_eq!(heuristics.min_section_length, 20);
-        assert_eq!(heuristics.required_headers.len(), 6);
-        assert!(heuristics.required_headers.contains(&"Problem".to_string()));
+        assert_eq!(heuristics.min_section_length, 15);
+        assert_eq!(heuristics.required_headers.len(), 5);
+        assert!(heuristics.required_headers.contains(&"My problem (personal):".to_string()));
         assert!(
             heuristics
                 .required_headers
-                .contains(&"Architecture".to_string())
+                .contains(&"Folder structure:".to_string())
         );
         assert_eq!(heuristics.illegal_strings.len(), 7);
         assert!(heuristics.illegal_strings.contains(&"TODO".to_string()));
@@ -195,12 +192,11 @@ mod tests {
         let json_content = r#"{
   "min_section_length": 20,
   "required_headers": [
-    "Problem",
-    "Vision",
-    "Scope",
-    "Boundaries",
-    "Tech Stack",
-    "Architecture"
+    "My problem (personal):",
+    "MVP (Minimum Viable Product):",
+    "Stack (force yourself to choose NOW):",
+    "Folder structure:",
+    "Definition of Done (each sprint):"
   ],
   "illegal_strings": [
     "TODO",
@@ -225,7 +221,7 @@ mod tests {
         let heuristics = load_heuristics(temp_file.path()).expect("Failed to load heuristics");
 
         assert_eq!(heuristics.min_section_length, 20);
-        assert_eq!(heuristics.required_headers.len(), 6);
+        assert_eq!(heuristics.required_headers.len(), 5);
         assert_eq!(heuristics.illegal_strings.len(), 7);
         assert_eq!(heuristics.management_files.dashboard, "00-START-HERE.md");
         assert!(heuristics.management_files.require_all_checked);

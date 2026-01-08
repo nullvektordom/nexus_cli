@@ -291,7 +291,10 @@ pub fn validate_planning_document_with_headers(
 
     // Check for missing required headers
     for required_header in required_headers {
-        if !found_headers.contains(required_header) {
+        // Check if any found header starts with the required header
+        // This allows headers like "Sprint 1: Foundation" to match "Sprint 1:"
+        let found = found_headers.iter().any(|h| h.starts_with(required_header));
+        if !found {
             result.add_issue(ValidationIssue::MissingHeader {
                 header: required_header.clone(),
             });
@@ -867,23 +870,20 @@ mod tests {
 
     #[test]
     fn test_validate_document_with_valid_content() {
-        let content = r"# Problem
+        let content = r"## My problem (personal):
 This is a test problem section with enough words to pass the minimum threshold requirement for validation purposes and testing needs for our comprehensive test suite validation. We need to ensure that all content here meets the minimum word count requirements so that this validation test can properly verify the streaming parser functionality without triggering any false positive errors during our automated testing procedures.
 
-# Vision
-This is the vision section also with sufficient words to meet the validation criteria for our testing needs today and beyond. We want to make sure that we have enough content here to satisfy all the requirements of the validation system so that we can properly test all the features of our markdown streaming parser without any issues whatsoever in our comprehensive test suite.
+## MVP (Minimum Viable Product):
+This is the MVP section with sufficient words to meet the validation criteria for our testing needs today and beyond. We want to make sure that we have enough content here to satisfy all the requirements of the validation system so that we can properly test all the features of our markdown streaming parser without any issues whatsoever in our comprehensive test suite.
 
-# Scope
-The scope section contains adequate content to satisfy minimum word count requirements for proper validation testing and verification. We need to ensure sufficient detail is provided here so that the validation system recognizes this as a complete and well-formed section that meets all necessary criteria for passing validation without triggering any warnings or errors during automated testing procedures.
+## Stack (force yourself to choose NOW):
+The stack section contains adequate content to satisfy minimum word count requirements for proper validation testing and verification. We need to ensure sufficient detail is provided here so that the validation system recognizes this as a complete and well-formed section that meets all necessary criteria for passing validation without triggering any warnings or errors during automated testing procedures.
 
-# Boundaries
-Boundary definitions with plenty of words to ensure we meet the required minimum for section length validation purposes. This section must contain enough detail to properly describe all the boundaries of our system while also meeting the minimum word count requirements established by our validation heuristics so that our tests can properly verify correct behavior without false positives.
+## Folder structure:
+Folder structure definitions with plenty of words to ensure we meet the required minimum for section length validation purposes. This section must contain enough detail to properly describe all the folder structure of our system while also meeting the minimum word count requirements established by our validation heuristics so that our tests can properly verify correct behavior without false positives.
 
-# Tech Stack
-Technology stack description with sufficient detail and word count to pass validation requirements completely and thoroughly. We need to provide comprehensive information about all the technologies used in this project while ensuring that we meet the minimum word count threshold established by our validation rules so that all automated tests pass successfully without any issues or warnings being generated.
-
-# Architecture
-Architecture overview containing enough words to meet minimum requirements for section validation in our testing framework and beyond. This section should provide detailed information about the system architecture while ensuring we meet all validation criteria including minimum word counts so that our comprehensive test suite can properly verify all aspects of the markdown streaming parser functionality.
+## Definition of Done (each sprint):
+Definition of Done description with sufficient detail and word count to pass validation requirements completely and thoroughly. We need to provide comprehensive information about the definition of done used in this project while ensuring that we meet the minimum word count threshold established by our validation rules so that all automated tests pass successfully without any issues or warnings being generated.
 ";
 
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -892,8 +892,8 @@ Architecture overview containing enough words to meet minimum requirements for s
         let heuristics = GateHeuristics::default();
         let result = validate_planning_document(temp_file.path(), &heuristics).unwrap();
 
-        // Should find all 6 required headers
-        assert_eq!(result.sections.len(), 6);
+        // Should find all 5 required headers
+        assert_eq!(result.sections.len(), 5);
         // Should pass with no issues (all sections have >50 words, no illegal strings)
         assert!(result.passed, "Expected document to pass validation");
         assert_eq!(result.issues.len(), 0);

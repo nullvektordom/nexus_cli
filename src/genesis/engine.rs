@@ -3,7 +3,7 @@
 //! Core engine for PROJECT GENESIS - generates foundational planning documents.
 
 use crate::catalyst::engine::parse_vision_document;
-use crate::genesis::{build_genesis_user_prompt, parse_genesis_response, GENESIS_SYSTEM_PROMPT};
+use crate::genesis::{build_genesis_user_prompt, parse_genesis_response, get_genesis_system_prompt};
 use crate::llm::LlmClient;
 use anyhow::{Context, Result};
 use colored::Colorize;
@@ -13,17 +13,17 @@ use std::path::PathBuf;
 
 /// Genesis Engine for creating foundational planning documents
 pub struct GenesisEngine {
-    /// Path to Obsidian vault
-    obsidian_path: PathBuf,
+    /// Path to planning directory (01-PLANNING)
+    planning_path: PathBuf,
     /// LLM client for generation
     llm_client: LlmClient,
 }
 
 impl GenesisEngine {
     /// Create a new Genesis engine
-    pub fn new(obsidian_path: PathBuf, llm_client: LlmClient) -> Result<Self> {
+    pub fn new(planning_path: PathBuf, llm_client: LlmClient) -> Result<Self> {
         Ok(Self {
-            obsidian_path,
+            planning_path,
             llm_client,
         })
     }
@@ -42,7 +42,7 @@ impl GenesisEngine {
         println!();
 
         // Load vision document
-        let vision_path = self.obsidian_path.join("01-Problem-and-Vision.md");
+        let vision_path = self.planning_path.join("01-Problem-and-Vision.md");
         let vision_content = fs::read_to_string(&vision_path)
             .with_context(|| format!("Failed to read vision document: {}", vision_path.display()))?;
 
@@ -63,6 +63,7 @@ impl GenesisEngine {
 
         // Build prompt
         let user_prompt = build_genesis_user_prompt(&vision);
+        let system_prompt = get_genesis_system_prompt();
 
         println!("{}", "═══════════════════════════════════════".cyan());
         println!("{}", "  Phase 2: LLM Generation".cyan().bold());
@@ -70,7 +71,7 @@ impl GenesisEngine {
         println!();
 
         // SAFETY GATE: Confirm LLM request
-        let full_prompt = format!("SYSTEM:\n{}\n\nUSER:\n{}", GENESIS_SYSTEM_PROMPT, user_prompt);
+        let full_prompt = format!("SYSTEM:\n{}\n\nUSER:\n{}", system_prompt, user_prompt);
         let confirmed = crate::llm::confirm_llm_prompt(&full_prompt, "Project Genesis")?;
         if !confirmed {
             anyhow::bail!("User cancelled Genesis request");
@@ -83,7 +84,7 @@ impl GenesisEngine {
         // Call LLM
         let response = self
             .llm_client
-            .complete_with_system(GENESIS_SYSTEM_PROMPT, &user_prompt)
+            .complete_with_system(&system_prompt, &user_prompt)
             .await
             .with_context(|| {
                 "Failed to generate documents via LLM. Possible causes:\n\
@@ -107,9 +108,9 @@ impl GenesisEngine {
         // Parse response into documents
         let documents = parse_genesis_response(&response);
 
-        if documents.len() != 3 {
+        if documents.len() != 4 {
             anyhow::bail!(
-                "LLM did not generate all 3 documents. Got {} documents. \
+                "LLM did not generate all 4 documents. Got {} documents. \
                 Response may need refinement.\n\n\
                 Check the raw response above to see if the LLM used the correct ---NEXT_DOC--- separator.",
                 documents.len()
@@ -147,7 +148,7 @@ impl GenesisEngine {
             match selection {
                 0 => {
                     // Accept - write to file
-                    let file_path = self.obsidian_path.join(&filename);
+                    let file_path = self.planning_path.join(&filename);
                     fs::write(&file_path, &content).with_context(|| {
                         format!("Failed to write document: {}", file_path.display())
                     })?;
