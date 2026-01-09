@@ -155,7 +155,7 @@ fn print_banner(state: &NexusState) -> Result<()> {
     );
     println!(
         "{}",
-        "║        🧠 Nexus Shell - Interactive REPL           ║".cyan()
+        "║        🧠 Nexus Shell - Interactive REPL              ║".cyan()
     );
     println!(
         "{}",
