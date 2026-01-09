@@ -1,6 +1,9 @@
 # Nexus CLI
 .nexus_history.json
 .nexus_session.json
+.env
+.nexus/
+target/
 
 # IDE
 .vscode/
@@ -9,6 +12,3 @@
 # OS
 .DS_Store
 Thumbs.db
-.env
-.nexus/
-target/

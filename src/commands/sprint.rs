@@ -80,7 +80,7 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
     // Parse sprint data from MVP breakdown
     println!("{}", "📖 Parsing MVP breakdown...".bright_blue());
     let mvp_path = planning_path
-        .join("01-PLANNING")
+        .join(&config.structure.planning_dir)
         .join("05-MVP-Breakdown.md");
 
     if !mvp_path.exists() {
@@ -121,15 +121,14 @@ pub fn execute(project_path: &Path, sprint_number: u32) -> Result<()> {
 
     // Create Git branch
     println!("{}", "🌿 Creating git branch...".bright_blue());
-    let repo_path = config.get_repo_path();
-
-    create_sprint_branch(&repo_path, sprint_data.number, &sprint_data.name)
+    // Use project_path (the actual git repo) instead of config.get_repo_path() (Obsidian vault)
+    create_sprint_branch(project_path, sprint_data.number, &sprint_data.name)
         .context("Failed to create sprint branch")?;
 
     println!(
         "{}",
         format!(
-            "  ✓ Branch created: sprint-{}-{}",
+            "  ✓ Branch created: feature/sprint-{}-{}",
             sprint_data.number, sprint_data.name
         )
         .green()

@@ -244,7 +244,7 @@ fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
     use colored::Colorize;
 
     println!("{}", "╔═══════════════════════════════════════════════════════╗".cyan());
-    println!("{}", "║   🏗️  NEXUS PROJECT BOOTSTRAP - THE GOD MOVE       ║".cyan());
+    println!("{}", "║   🏗️  NEXUS PROJECT BOOTSTRAP - THE GOD MOVE          ║".cyan());
     println!("{}", "╚═══════════════════════════════════════════════════════╝".cyan());
     println!();
 
@@ -354,24 +354,88 @@ fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
     println!();
     println!("{} Creating .gitignore...", "5/5".cyan().bold());
 
-    // Create .gitignore
-    let gitignore_content = "# Nexus CLI
-.nexus_history.json
-.nexus_session.json
+    // Smart .gitignore handling - preserve existing entries and only add missing ones
+    let gitignore_path = current_dir.join(".gitignore");
+    let required_entries = vec![
+        "# Nexus CLI",
+        ".nexus_history.json",
+        ".nexus_session.json",
+        ".env",
+        ".nexus/",
+        "target/",
+        "",
+        "# IDE",
+        ".vscode/",
+        ".idea/",
+        "",
+        "# OS",
+        ".DS_Store",
+        "Thumbs.db",
+    ];
 
-# IDE
-.vscode/
-.idea/
+    let mut final_content = String::new();
+    let mut existing_entries = std::collections::HashSet::new();
 
-# OS
-.DS_Store
-Thumbs.db
-";
+    // If .gitignore exists, read and preserve its content
+    if gitignore_path.exists() {
+        if let Ok(existing_content) = fs::read_to_string(&gitignore_path) {
+            final_content = existing_content.clone();
+            // Track what's already in the file (normalized, trimmed lines)
+            for line in existing_content.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    existing_entries.insert(trimmed.to_string());
+                }
+            }
+        }
+    }
 
-    fs::write(current_dir.join(".gitignore"), gitignore_content)
+    // Add missing required entries
+    let mut added_entries = Vec::new();
+    for entry in &required_entries {
+        let trimmed = entry.trim();
+        // Skip empty lines and comments for the "already exists" check
+        if !trimmed.is_empty() && !trimmed.starts_with('#') {
+            if !existing_entries.contains(trimmed) {
+                added_entries.push(*entry);
+            }
+        } else if entry.starts_with('#') && !existing_entries.contains(trimmed) {
+            // Add missing section headers
+            added_entries.push(*entry);
+        }
+    }
+
+    // Append missing entries if any
+    if !added_entries.is_empty() {
+        if !final_content.is_empty() && !final_content.ends_with('\n') {
+            final_content.push('\n');
+        }
+        if !final_content.is_empty() {
+            final_content.push('\n');
+        }
+        for entry in &added_entries {
+            final_content.push_str(entry);
+            final_content.push('\n');
+        }
+    }
+
+    // If file didn't exist, create with full template
+    if !gitignore_path.exists() {
+        final_content = required_entries.join("\n") + "\n";
+    }
+
+    fs::write(&gitignore_path, final_content)
         .map_err(|e| format!("Failed to create .gitignore: {e}"))?;
 
-    println!("    {} .gitignore created", "✓".green());
+    if gitignore_path.metadata().map(|m| m.len()).unwrap_or(0) > 0 {
+        if added_entries.is_empty() {
+            println!("    {} .gitignore already up to date", "✓".green());
+        } else {
+            println!("    {} .gitignore updated with {} new entries", "✓".green(), added_entries.len());
+        }
+    } else {
+        println!("    {} .gitignore created", "✓".green());
+    }
 
     println!();
     println!("{}", "╔═══════════════════════════════════════════════════════╗".green());
