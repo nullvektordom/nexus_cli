@@ -30,8 +30,8 @@ pub fn create_sprint_branch(repo_path: &Path, sprint_number: u32, sprint_name: &
     // Check if working directory is clean
     ensure_clean_working_directory(&repo)?;
 
-    // Generate branch name
-    let branch_name = format!("sprint-{sprint_number}-{sprint_name}");
+    // Generate branch name following common convention: feature/sprint-N-description
+    let branch_name = format!("feature/sprint-{sprint_number}-{sprint_name}");
 
     // Check if branch already exists
     if branch_exists(&repo, &branch_name)? {
@@ -56,20 +56,33 @@ pub fn create_sprint_branch(repo_path: &Path, sprint_number: u32, sprint_name: &
     Ok(())
 }
 
-/// Check if the working directory is clean (no uncommitted changes)
+/// Check if the working directory is clean (no uncommitted changes to tracked files)
+/// Untracked files are allowed - we only care about modifications to existing files
 fn ensure_clean_working_directory(repo: &Repository) -> Result<()> {
     let statuses = repo
         .statuses(None)
         .context("Failed to get repository status")?;
 
-    if !statuses.is_empty() {
-        let mut dirty_files = Vec::new();
-        for entry in statuses.iter() {
+    let mut dirty_files = Vec::new();
+    for entry in statuses.iter() {
+        let status = entry.status();
+        // Ignore untracked files (WT_NEW) - only fail on modifications to tracked files
+        if status.is_wt_modified()
+            || status.is_wt_deleted()
+            || status.is_wt_renamed()
+            || status.is_wt_typechange()
+            || status.is_index_modified()
+            || status.is_index_deleted()
+            || status.is_index_renamed()
+            || status.is_index_new()
+        {
             if let Some(path) = entry.path() {
                 dirty_files.push(path.to_string());
             }
         }
+    }
 
+    if !dirty_files.is_empty() {
         bail!(
             "Working directory is not clean. Please commit or stash your changes first.\nModified files:\n  {}",
             dirty_files.join("\n  ")
@@ -162,7 +175,7 @@ mod tests {
 
         // Verify branch exists
         let repo = Repository::open(&repo_path).unwrap();
-        let branch = repo.find_branch("sprint-4-the-sprint-orchestrator", BranchType::Local);
+        let branch = repo.find_branch("feature/sprint-4-the-sprint-orchestrator", BranchType::Local);
         assert!(branch.is_ok(), "Branch should exist");
 
         // Verify we're on the new branch
@@ -170,7 +183,7 @@ mod tests {
         assert!(head.is_branch(), "HEAD should be a branch");
         assert_eq!(
             head.shorthand(),
-            Some("sprint-4-the-sprint-orchestrator"),
+            Some("feature/sprint-4-the-sprint-orchestrator"),
             "Should be on new branch"
         );
     }
@@ -195,8 +208,8 @@ mod tests {
     fn test_create_sprint_branch_dirty_working_directory() {
         let (_temp, repo_path) = create_test_repo();
 
-        // Create an uncommitted file
-        fs::write(repo_path.join("dirty.txt"), "uncommitted changes").unwrap();
+        // Modify a tracked file (not just add untracked)
+        fs::write(repo_path.join("README.md"), "# Modified\n").unwrap();
 
         let result = create_sprint_branch(&repo_path, 3, "test-dirty");
         assert!(result.is_err(), "Should fail with dirty working directory");
@@ -215,12 +228,15 @@ mod tests {
         let result = ensure_clean_working_directory(&repo);
         assert!(result.is_ok(), "Clean repo should pass");
 
-        // Add uncommitted file
-        fs::write(repo_path.join("test.txt"), "test").unwrap();
-
-        // Dirty repo should fail
+        // Add untracked file - should still pass (untracked files are allowed)
+        fs::write(repo_path.join("untracked.txt"), "untracked").unwrap();
         let result = ensure_clean_working_directory(&repo);
-        assert!(result.is_err(), "Dirty repo should fail");
+        assert!(result.is_ok(), "Untracked files should be allowed");
+
+        // Modify tracked file - should fail
+        fs::write(repo_path.join("README.md"), "# Modified\n").unwrap();
+        let result = ensure_clean_working_directory(&repo);
+        assert!(result.is_err(), "Modified tracked files should fail");
     }
 
     #[test]
@@ -239,7 +255,7 @@ mod tests {
 
         // Check existing branch
         assert!(
-            branch_exists(&repo, "sprint-1-test").unwrap(),
+            branch_exists(&repo, "feature/sprint-1-test").unwrap(),
             "Existing branch should return true"
         );
     }
