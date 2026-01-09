@@ -91,7 +91,7 @@ fn main() {
 
     match cli.command {
         Commands::Init { project_name, mode, project } => {
-            if let Err(e) = commands::init::execute(&project_name, &mode, project) {
+            if let Err(e) = commands::init::execute(&project_name, &mode, project, None, None) {
                 eprintln!("{e}");
                 std::process::exit(1);
             }

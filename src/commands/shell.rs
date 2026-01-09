@@ -264,7 +264,7 @@ fn execute_command(
             }
             Ok(())
         }
-        "init" => execute_init_command(args),
+        "init" => execute_init_command(state, args),
         _ => {
             // Check if LLM is enabled and context is enabled for natural language processing
             let is_context_enabled = *context_enabled.lock().unwrap();
@@ -1518,7 +1518,7 @@ fn find_model_paths() -> (String, String) {
 /// * `state` - Current shell session state
 /// * `args` - Command arguments (e.g., ["start"] or ["done"])
 ///   Execute the init command from REPL
-fn execute_init_command(args: &[&str]) -> Result<()> {
+fn execute_init_command(state: &NexusState, args: &[&str]) -> Result<()> {
     if args.is_empty() {
         anyhow::bail!("Usage: init <project-name> [--mode sprint|adhoc] [--project]");
     }
@@ -1549,9 +1549,15 @@ fn execute_init_command(args: &[&str]) -> Result<()> {
         }
     }
 
-    // Call the init module's execute function
-    crate::commands::init::execute(project_name, mode, is_full_project)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    // Call the init module's execute function with repos_root and obsidian_vault_root
+    crate::commands::init::execute(
+        project_name,
+        mode,
+        is_full_project,
+        Some(&state.repos_root),
+        Some(&state.obsidian_vault_root),
+    )
+    .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(())
 }

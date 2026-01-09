@@ -5,7 +5,20 @@ use std::path::{Path, PathBuf};
 
 /// Execute the init command
 /// Creates a new project folder with template files and nexus.toml
-pub fn execute(project_name: &str, mode: &str, is_full_project: bool) -> Result<(), String> {
+///
+/// # Arguments
+/// * `project_name` - Name of the project to create
+/// * `mode` - "sprint" or "adhoc"
+/// * `is_full_project` - If true, creates full project structure (God Move)
+/// * `base_dir` - Optional base directory to create project in (defaults to current dir)
+/// * `obsidian_root` - Optional Obsidian vault root directory (defaults to ~/obsidian/work)
+pub fn execute(
+    project_name: &str,
+    mode: &str,
+    is_full_project: bool,
+    base_dir: Option<&Path>,
+    obsidian_root: Option<&Path>,
+) -> Result<(), String> {
     // Validate mode
     if mode != "sprint" && mode != "adhoc" {
         return Err(format!(
@@ -15,9 +28,15 @@ pub fn execute(project_name: &str, mode: &str, is_full_project: bool) -> Result<
 
     // If --project flag is set, use the God Move initialization
     if is_full_project {
-        return init_full_project(project_name, mode);
+        return init_full_project(project_name, mode, base_dir, obsidian_root);
     }
-    let project_path = PathBuf::from(project_name);
+
+    // Construct project path: base_dir/project_name or just project_name
+    let project_path = if let Some(base) = base_dir {
+        base.join(project_name)
+    } else {
+        PathBuf::from(project_name)
+    };
 
     // Extract the folder name from the path (for use as project_name in config)
     let folder_name = project_path
@@ -240,7 +259,12 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
 
 /// THE "GOD MOVE" - Initialize a complete project from scratch
 /// This prevents the "Moment 22" deadlock by setting up everything correctly from day one
-fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
+fn init_full_project(
+    project_name: &str,
+    _mode: &str,
+    base_dir: Option<&Path>,
+    obsidian_root: Option<&Path>,
+) -> Result<(), String> {
     use colored::Colorize;
 
     println!("{}", "╔═══════════════════════════════════════════════════════╗".cyan());
@@ -248,9 +272,19 @@ fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
     println!("{}", "╚═══════════════════════════════════════════════════════╝".cyan());
     println!();
 
-    // Step 1: Get current directory as project root
-    let current_dir = std::env::current_dir()
-        .map_err(|e| format!("Failed to get current directory: {e}"))?;
+    // Step 1: Determine project root directory
+    let current_dir = if let Some(base) = base_dir {
+        base.join(project_name)
+    } else {
+        std::env::current_dir()
+            .map_err(|e| format!("Failed to get current directory: {e}"))?
+    };
+
+    // Create the project directory if it doesn't exist (when using base_dir)
+    if base_dir.is_some() && !current_dir.exists() {
+        fs::create_dir_all(&current_dir)
+            .map_err(|e| format!("Failed to create project directory: {e}"))?;
+    }
 
     println!("{} {}", "📂 Project Root:".bold(), current_dir.display());
 
@@ -259,13 +293,16 @@ fn init_full_project(project_name: &str, _mode: &str) -> Result<(), String> {
     println!("{}", "📝 Obsidian Vault Configuration".bold());
     println!("   Where should the planning documents be stored?");
 
-    let home_dir = std::env::var("HOME")
-        .map_err(|_| "Could not determine HOME directory".to_string())?;
-
-    let default_vault = PathBuf::from(&home_dir)
-        .join("obsidian")
-        .join("work")
-        .join(project_name);
+    let default_vault = if let Some(vault_root) = obsidian_root {
+        vault_root.join(project_name)
+    } else {
+        let home_dir = std::env::var("HOME")
+            .map_err(|_| "Could not determine HOME directory".to_string())?;
+        PathBuf::from(&home_dir)
+            .join("obsidian")
+            .join("work")
+            .join(project_name)
+    };
 
     println!("   Default: {}", default_vault.display().to_string().dimmed());
     println!("   Press Enter to use default, or type custom path:");
