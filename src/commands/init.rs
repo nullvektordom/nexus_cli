@@ -1,4 +1,5 @@
 use crate::config::NexusConfig;
+use crate::embedded_templates;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -79,21 +80,12 @@ fn init_sprint_project(
     folder_name: &str,
     absolute_path: &Path,
 ) -> Result<(), String> {
-    // Copy template files from templates/project
-    let template_source = Path::new("templates/project");
-    if !template_source.exists() {
-        // Clean up the created folder on error
-        let _ = fs::remove_dir(project_path);
-        return Err(format!(
-            "Error: Template directory not found at '{}'",
-            template_source.display()
-        ));
-    }
-
-    copy_dir_recursive(template_source, project_path).map_err(|e| {
+    // Write embedded template files to project directory
+    let templates = embedded_templates::get_project_templates();
+    embedded_templates::write_templates(&templates, project_path).map_err(|e| {
         // Clean up the created folder on error
         let _ = fs::remove_dir_all(project_path);
-        format!("Failed to copy template files: {e}")
+        format!("Failed to write template files: {e}")
     })?;
 
     println!("✓ Copied template files");
@@ -152,47 +144,15 @@ fn init_adhoc_project(
 
     println!("✓ Created Obsidian vault structure at: {}", obsidian_vault_path.display());
 
-    // Copy adhoc planning templates to Obsidian vault
-    let template_source = Path::new("templates/adhoc");
-    if !template_source.exists() {
+    // Write embedded adhoc templates to Obsidian vault
+    let templates = embedded_templates::get_adhoc_templates();
+    embedded_templates::write_templates(&templates, &management_dir).map_err(|e| {
         let _ = fs::remove_dir_all(project_path);
         let _ = fs::remove_dir_all(&obsidian_vault_path);
-        return Err(format!(
-            "Error: Adhoc template directory not found at '{}'",
-            template_source.display()
-        ));
-    }
-
-    // Copy Task-Capture.md
-    fs::copy(
-        template_source.join("Task-Capture.md"),
-        planning_dir.join("Task-Capture.md"),
-    )
-    .map_err(|e| format!("Failed to copy Task-Capture.md: {e}"))?;
-
-    // Copy Task-Approach.md
-    fs::copy(
-        template_source.join("Task-Approach.md"),
-        planning_dir.join("Task-Approach.md"),
-    )
-    .map_err(|e| format!("Failed to copy Task-Approach.md: {e}"))?;
-
-    // Copy Task-Validation.md
-    fs::copy(
-        template_source.join("Task-Validation.md"),
-        planning_dir.join("Task-Validation.md"),
-    )
-    .map_err(|e| format!("Failed to copy Task-Validation.md: {e}"))?;
+        format!("Failed to write adhoc templates: {e}")
+    })?;
 
     println!("✓ Copied planning templates to Obsidian vault");
-
-    // Copy dashboard to 00-MANAGEMENT/
-    fs::copy(
-        template_source.join("00-ADHOC-TASK.md"),
-        management_dir.join("00-ADHOC-TASK.md"),
-    )
-    .map_err(|e| format!("Failed to copy dashboard: {e}"))?;
-
     println!("✓ Created task dashboard in Obsidian vault");
 
     // Create nexus.toml in the repo pointing to Obsidian vault
@@ -226,33 +186,6 @@ fn init_adhoc_project(
     println!("      {}/00-MANAGEMENT/adhoc-planning/", obsidian_vault_path.display());
     println!("   3. Run 'nexus gate .' to validate planning");
     println!("   4. Run 'nexus task start' to begin implementation");
-
-    Ok(())
-}
-
-/// Recursively copy a directory and its contents
-fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
-    // Create destination directory if it doesn't exist
-    if !dst.exists() {
-        fs::create_dir(dst)?;
-    }
-
-    // Iterate over entries in the source directory
-    for entry in fs::read_dir(src)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let src_path = entry.path();
-        let file_name = entry.file_name();
-        let dst_path = dst.join(&file_name);
-
-        if file_type.is_dir() {
-            // Recursively copy subdirectory
-            copy_dir_recursive(&src_path, &dst_path)?;
-        } else {
-            // Copy file
-            fs::copy(&src_path, &dst_path)?;
-        }
-    }
 
     Ok(())
 }
@@ -499,19 +432,12 @@ fn init_full_project(
 fn copy_project_templates(vault_path: &Path) -> Result<(), String> {
     use colored::Colorize;
 
-    let template_source = Path::new("templates/project");
-    if !template_source.exists() {
-        return Err(format!(
-            "Template directory not found at '{}'",
-            template_source.display()
-        ));
-    }
+    // Write embedded templates to vault
+    let templates = embedded_templates::get_project_templates();
+    embedded_templates::write_templates(&templates, vault_path)
+        .map_err(|e| format!("Failed to write templates: {e}"))?;
 
-    // 1. Setup 01-PLANNING
-    let planning_dir = vault_path.join("01-PLANNING");
-    fs::create_dir_all(&planning_dir)
-        .map_err(|e| format!("Failed to create planning directory: {e}"))?;
-
+    // List the files that were created for user feedback
     let planning_files = vec![
         "01-Problem-and-Vision.md",
         "02-Scope-and-Boundaries.md",
@@ -521,15 +447,8 @@ fn copy_project_templates(vault_path: &Path) -> Result<(), String> {
     ];
 
     for file in planning_files {
-        fs::copy(template_source.join(file), planning_dir.join(file))
-            .map_err(|e| format!("Failed to copy {file}: {e}"))?;
         println!("    {} {}", "✓".green(), file);
     }
-
-    // 2. Setup 00-MANAGEMENT
-    let management_dir = vault_path.join("00-MANAGEMENT");
-    fs::create_dir_all(&management_dir)
-        .map_err(|e| format!("Failed to create 00-MANAGEMENT directory: {e}"))?;
 
     let management_files = vec![
         "00-START-HERE.md",
@@ -537,24 +456,21 @@ fn copy_project_templates(vault_path: &Path) -> Result<(), String> {
     ];
 
     for file in management_files {
-        fs::copy(template_source.join(file), management_dir.join(file))
-            .map_err(|e| format!("Failed to copy {file}: {e}"))?;
         println!("    {} {}", "✓".green(), file);
     }
 
     println!("    {} 00-MANAGEMENT/ directory", "✓".green());
 
-    // 3. Other directories (decisions, dev-sessions)
-    let other_dirs = vec!["decisions", "dev-sessions"];
-    for dir in other_dirs {
-        let src = template_source.join(dir);
-        let dst = vault_path.join(dir);
-        if src.exists() {
-            copy_dir_recursive(&src, &dst)
-                .map_err(|e| format!("Failed to copy {dir}: {e}"))?;
-            println!("    {} {}/ directory", "✓".green(), dir);
-        }
-    }
+    // Create empty directories for decisions and dev-sessions
+    let decisions_dir = vault_path.join("decisions");
+    fs::create_dir_all(&decisions_dir)
+        .map_err(|e| format!("Failed to create decisions directory: {e}"))?;
+    println!("    {} decisions/ directory", "✓".green());
+
+    let dev_sessions_dir = vault_path.join("dev-sessions");
+    fs::create_dir_all(&dev_sessions_dir)
+        .map_err(|e| format!("Failed to create dev-sessions directory: {e}"))?;
+    println!("    {} dev-sessions/ directory", "✓".green());
 
     Ok(())
 }

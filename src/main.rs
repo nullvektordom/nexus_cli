@@ -6,6 +6,7 @@ mod catalyst;
 mod commands;
 mod config;
 mod context;
+mod embedded_templates;
 mod embeddings;
 mod genesis;
 mod git_ops;
