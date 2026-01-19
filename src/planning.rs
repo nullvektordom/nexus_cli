@@ -326,12 +326,9 @@ pub fn validate_planning_document_with_headers(
 
     // Check for missing required headers
     for required_header in required_headers {
-        // Normalize both required and found headers for flexible matching
-        let normalized_required = normalize_header(required_header);
-        let found = found_headers.iter().any(|h| {
-            let normalized_found = normalize_header(h);
-            normalized_found.to_lowercase().contains(&normalized_required.to_lowercase())
-        });
+        // Check if any found header starts with the required header
+        // This allows headers like "Sprint 1: Foundation" to match "Sprint 1:"
+        let found = found_headers.iter().any(|h| h.starts_with(required_header));
         if !found {
             result.add_issue(ValidationIssue::MissingHeader {
                 header: required_header.clone(),
