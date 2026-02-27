@@ -118,25 +118,32 @@ pub fn execute(project_path: &Path) -> Result<()> {
 
     println!("  Testing connection to: {}", test_url.cyan());
 
-    let connectivity_result = std::process::Command::new("curl")
-        .args(["-I", "-s", "-o", "/dev/null", "-w", "%{http_code}", test_url, "--max-time", "5"])
-        .output();
+    let runtime = tokio::runtime::Runtime::new()?;
+    let connectivity_result = runtime.block_on(async {
+        reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()?
+            .head(test_url)
+            .send()
+            .await
+    });
 
     match connectivity_result {
-        Ok(output) => {
-            let status_code = String::from_utf8_lossy(&output.stdout);
-            if status_code.starts_with('2') || status_code.starts_with('3') || status_code == "401" || status_code == "403" {
-                println!("  {} Network connection successful (HTTP {})", "✓".green().bold(), status_code.trim());
-            } else if status_code.is_empty() {
-                println!("  {} Network connection failed (timeout or unreachable)", "✗".red().bold());
-                println!("  Check your internet connection and firewall settings");
+        Ok(response) => {
+            let status = response.status();
+            if status.is_success() || status.is_redirection() || status == 401 || status == 403 {
+                println!("  {} Network connection successful (HTTP {})", "✓".green().bold(), status.as_u16());
             } else {
-                println!("  {} Unexpected HTTP status: {}", "⚠".yellow().bold(), status_code.trim());
+                println!("  {} Unexpected HTTP status: {}", "⚠".yellow().bold(), status.as_u16());
             }
         }
+        Err(e) if e.is_timeout() => {
+            println!("  {} Network connection timed out", "✗".red().bold());
+            println!("  Check your internet connection and firewall settings");
+        }
         Err(_) => {
-            println!("  {} curl command not available, skipping network test", "⚠".yellow().bold());
-            println!("  Install curl to enable network diagnostics");
+            println!("  {} Network connection failed (unreachable)", "✗".red().bold());
+            println!("  Check your internet connection and firewall settings");
         }
     }
     println!();

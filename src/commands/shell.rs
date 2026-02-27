@@ -14,13 +14,22 @@ use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::sync::{Arc, Mutex};
 
-/// Global state file path (not project-specific)
-const GLOBAL_STATE_FILE: &str = "/home/nullvektor/.config/nexus/session.json";
+/// Returns the cross-platform path to the global Nexus session file
+fn global_state_file() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".config")
+        })
+        .join("nexus")
+        .join("session.json")
+}
 
 /// Execute the shell command - starts an interactive REPL
 pub fn execute() -> Result<()> {
     // Load or create global session state
-    let state_file = std::path::PathBuf::from(GLOBAL_STATE_FILE);
+    let state_file = global_state_file();
     let mut state = NexusState::load(&state_file)?;
 
     // Save initial state
@@ -1489,16 +1498,23 @@ fn find_model_paths() -> (String, String) {
     let model_name = "model.onnx";
     let tokenizer_name = "tokenizer.json";
 
-    // List of candidate directories to check
-    let candidates = [
-        "models/models",
-        "models",
-        "/home/nullvektor/repos/nexus_cli/models/models",
+    // Build list of candidate directories to check
+    let mut candidate_dirs: Vec<std::path::PathBuf> = vec![
+        std::path::PathBuf::from("models/models"),
+        std::path::PathBuf::from("models"),
     ];
 
-    for dir in candidates {
-        let model_path = std::path::Path::new(dir).join(model_name);
-        let tokenizer_path = std::path::Path::new(dir).join(tokenizer_name);
+    // Add exe-relative path as a portable fallback
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            candidate_dirs.push(exe_dir.join("models").join("models"));
+            candidate_dirs.push(exe_dir.join("models"));
+        }
+    }
+
+    for dir in &candidate_dirs {
+        let model_path = dir.join(model_name);
+        let tokenizer_path = dir.join(tokenizer_name);
 
         if model_path.exists() && tokenizer_path.exists() {
             return (

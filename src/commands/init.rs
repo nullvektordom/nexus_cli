@@ -17,7 +17,8 @@ struct AdhocTaskPath {
 impl AdhocTaskPath {
     /// Parse a path string like "project/type/name" into components
     fn parse(path: &str) -> Result<Self, String> {
-        let parts: Vec<&str> = path.trim_matches('"').split('/').collect();
+        let clean = path.trim_matches('"').replace('\\', "/");
+        let parts: Vec<&str> = clean.split('/').filter(|s| !s.is_empty()).collect();
 
         if parts.len() != 3 {
             return Err(format!(
@@ -41,6 +42,11 @@ impl AdhocTaskPath {
             task_name: parts[2].to_string(),
         })
     }
+}
+
+/// Returns the user's home directory cross-platform
+fn home_dir() -> Result<PathBuf, String> {
+    dirs::home_dir().ok_or_else(|| "Could not determine home directory".to_string())
 }
 
 /// Prompt user with a yes/no question, returns true for yes
@@ -188,12 +194,11 @@ fn init_adhoc_task(task_path: &str) -> Result<(), String> {
     // Parse the task path
     let parsed = AdhocTaskPath::parse(task_path)?;
 
-    let home_dir = std::env::var("HOME")
-        .map_err(|_| "Could not determine HOME directory".to_string())?;
+    let home = home_dir()?;
 
     // Define base paths
-    let obsidian_root = PathBuf::from(&home_dir).join("obsidian").join("work");
-    let repos_root = PathBuf::from(&home_dir).join("repos");
+    let obsidian_root = home.join("obsidian").join("work");
+    let repos_root = home.join("repos");
 
     // Project-level paths
     let obsidian_project_path = obsidian_root.join(&parsed.project);
@@ -254,15 +259,20 @@ fn init_adhoc_task(task_path: &str) -> Result<(), String> {
     println!();
     println!("{} Checking repository...", "2/4".cyan().bold());
     if !repo_path.exists() {
+        let mkdir_cmd = if cfg!(windows) {
+            format!("mkdir \"{}\"", repo_path.display())
+        } else {
+            format!("mkdir -p \"{}\"", repo_path.display())
+        };
         return Err(format!(
             "Repository folder not found: {}\n\
              \n\
              The adhoc task requires an existing git repository.\n\
              Either:\n\
-             • Create the repository: mkdir -p {} && cd {} && git init\n\
+             • Create the repository: {} && cd \"{}\" && git init\n\
              • Or use 'nexus init {} --project' to create a full project",
             repo_path.display(),
-            repo_path.display(),
+            mkdir_cmd,
             repo_path.display(),
             parsed.project
         ));
@@ -272,7 +282,7 @@ fn init_adhoc_task(task_path: &str) -> Result<(), String> {
         return Err(format!(
             "Directory exists but is not a git repository: {}\n\
              \n\
-             Initialize git: cd {} && git init",
+             Initialize git: cd \"{}\" && git init",
             repo_path.display(),
             repo_path.display()
         ));
@@ -424,9 +434,7 @@ fn init_full_project(
     let default_vault = if let Some(vault_root) = obsidian_root {
         vault_root.join(project_name)
     } else {
-        let home_dir = std::env::var("HOME")
-            .map_err(|_| "Could not determine HOME directory".to_string())?;
-        PathBuf::from(&home_dir)
+        home_dir()?
             .join("obsidian")
             .join("work")
             .join(project_name)
@@ -450,15 +458,8 @@ fn init_full_project(
     println!("{} Initializing Git repository...", "1/5".cyan().bold());
 
     // Initialize Git repository in current directory
-    let git_status = std::process::Command::new("git")
-        .args(["init"])
-        .current_dir(&current_dir)
-        .output()
-        .map_err(|e| format!("Failed to execute git init: {e}"))?;
-
-    if !git_status.status.success() {
-        return Err("Failed to initialize Git repository".to_string());
-    }
+    git2::Repository::init(&current_dir)
+        .map_err(|e| format!("Failed to initialize Git repository: {e}"))?;
 
     println!("    {} Git repository initialized", "✓".green());
 

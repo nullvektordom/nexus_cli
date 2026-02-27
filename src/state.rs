@@ -12,11 +12,20 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
-/// Default Obsidian vault root directory
-pub const DEFAULT_OBSIDIAN_ROOT: &str = "/home/nullvektor/obsidian/projects";
+/// Returns the default Obsidian vault root directory (cross-platform)
+pub fn default_obsidian_root() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("obsidian")
+        .join("projects")
+}
 
-/// Default repos root directory
-pub const DEFAULT_REPOS_ROOT: &str = "/home/nullvektor/repos";
+/// Returns the default repos root directory (cross-platform)
+pub fn default_repos_root_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("repos")
+}
 
 /// Represents the persistent state of a Nexus shell session
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +51,7 @@ pub struct NexusState {
 }
 
 fn default_repos_root() -> PathBuf {
-    PathBuf::from(DEFAULT_REPOS_ROOT)
+    default_repos_root_path()
 }
 
 impl NexusState {
@@ -52,8 +61,8 @@ impl NexusState {
         Self {
             session_id: Uuid::new_v4().to_string(),
             active_project_id: None,
-            obsidian_vault_root: PathBuf::from(DEFAULT_OBSIDIAN_ROOT),
-            repos_root: PathBuf::from(DEFAULT_REPOS_ROOT),
+            obsidian_vault_root: default_obsidian_root(),
+            repos_root: default_repos_root_path(),
             created_at: now.clone(),
             last_updated: now,
         }
@@ -181,11 +190,8 @@ mod tests {
         let state = NexusState::new();
 
         assert!(state.active_project_id.is_none());
-        assert_eq!(
-            state.obsidian_vault_root,
-            PathBuf::from(DEFAULT_OBSIDIAN_ROOT)
-        );
-        assert_eq!(state.repos_root, PathBuf::from(DEFAULT_REPOS_ROOT));
+        assert_eq!(state.obsidian_vault_root, default_obsidian_root());
+        assert_eq!(state.repos_root, default_repos_root_path());
         assert!(!state.session_id.is_empty());
         assert!(!state.created_at.is_empty());
         assert_eq!(state.created_at, state.last_updated);
@@ -231,14 +237,12 @@ mod tests {
 
         assert_eq!(
             state.get_active_repo_path(),
-            Some(PathBuf::from("/home/nullvektor/repos/nexus_cli"))
+            Some(default_repos_root_path().join("nexus_cli"))
         );
 
         assert_eq!(
             state.get_active_obsidian_path(),
-            Some(PathBuf::from(
-                "/home/nullvektor/obsidian/projects/nexus_cli"
-            ))
+            Some(default_obsidian_root().join("nexus_cli"))
         );
     }
 }
