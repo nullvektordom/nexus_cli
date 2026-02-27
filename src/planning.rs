@@ -95,30 +95,34 @@ pub fn validate_planning_document(
 
     // Tracking state during streaming
     let mut current_header: Option<String> = None;
+    let mut current_header_level: Option<pulldown_cmark::HeadingLevel> = None;
     let mut current_section_words: Vec<String> = Vec::new();
     let mut found_headers: HashSet<String> = HashSet::new();
     let mut line_number: usize = 1;
 
     for event in parser {
         match event {
-            Event::Start(Tag::Heading { .. }) => {
+            Event::Start(Tag::Heading { level, .. }) => {
                 // Save previous section if exists
                 if let Some(ref header) = current_header {
                     let word_count = current_section_words.len();
                     result.sections.insert(header.clone(), word_count);
 
-                    // Check if section meets minimum length
-                    if word_count < heuristics.min_section_length as usize {
-                        result.add_issue(ValidationIssue::SectionTooShort {
-                            header: header.clone(),
-                            word_count,
-                            required: heuristics.min_section_length as usize,
-                        });
+                    // Only validate word count for H2+ headers (skip H1 document titles)
+                    if let Some(header_level) = current_header_level {
+                        if header_level as u32 >= 2 && word_count < heuristics.min_section_length as usize {
+                            result.add_issue(ValidationIssue::SectionTooShort {
+                                header: header.clone(),
+                                word_count,
+                                required: heuristics.min_section_length as usize,
+                            });
+                        }
                     }
                 }
                 // Reset for new section
                 current_section_words.clear();
                 current_header = None;
+                current_header_level = Some(level);
             }
             Event::End(TagEnd::Heading(_)) => {
                 // Header text is now complete
@@ -164,12 +168,15 @@ pub fn validate_planning_document(
         let word_count = current_section_words.len();
         result.sections.insert(header.clone(), word_count);
 
-        if word_count < heuristics.min_section_length as usize {
-            result.add_issue(ValidationIssue::SectionTooShort {
-                header: header.clone(),
-                word_count,
-                required: heuristics.min_section_length as usize,
-            });
+        // Only validate word count for H2+ headers (skip H1 document titles)
+        if let Some(header_level) = current_header_level {
+            if header_level as u32 >= 2 && word_count < heuristics.min_section_length as usize {
+                result.add_issue(ValidationIssue::SectionTooShort {
+                    header: header.clone(),
+                    word_count,
+                    required: heuristics.min_section_length as usize,
+                });
+            }
         }
     }
 
@@ -183,6 +190,27 @@ pub fn validate_planning_document(
     }
 
     Ok(result)
+}
+
+/// Normalizes a header by removing parenthetical text for flexible matching
+///
+/// # Examples
+/// * "Dependencies (important ones):" -> "Dependencies"
+/// * "Flow (user journey):" -> "Flow"
+/// * "Folder structure:" -> "Folder structure:"
+fn normalize_header(header: &str) -> String {
+    // Remove text in parentheses and trim
+    let mut result = String::new();
+    let mut in_parens = false;
+    for ch in header.chars() {
+        match ch {
+            '(' => in_parens = true,
+            ')' => in_parens = false,
+            _ if !in_parens => result.push(ch),
+            _ => (),
+        }
+    }
+    result.trim().to_string()
 }
 
 /// Validates a planning document with specific required headers (context-aware validation)
@@ -210,30 +238,34 @@ pub fn validate_planning_document_with_headers(
 
     // Tracking state during streaming
     let mut current_header: Option<String> = None;
+    let mut current_header_level: Option<pulldown_cmark::HeadingLevel> = None;
     let mut current_section_words: Vec<String> = Vec::new();
     let mut found_headers: HashSet<String> = HashSet::new();
     let mut line_number: usize = 1;
 
     for event in parser {
         match event {
-            Event::Start(Tag::Heading { .. }) => {
+            Event::Start(Tag::Heading { level, .. }) => {
                 // Save previous section if exists
                 if let Some(ref header) = current_header {
                     let word_count = current_section_words.len();
                     result.sections.insert(header.clone(), word_count);
 
-                    // Check if section meets minimum length
-                    if word_count < min_word_count {
-                        result.add_issue(ValidationIssue::SectionTooShort {
-                            header: header.clone(),
-                            word_count,
-                            required: min_word_count,
-                        });
+                    // Only validate word count for H2+ headers (skip H1 document titles)
+                    if let Some(header_level) = current_header_level {
+                        if header_level != pulldown_cmark::HeadingLevel::H1 && word_count < min_word_count {
+                            result.add_issue(ValidationIssue::SectionTooShort {
+                                header: header.clone(),
+                                word_count,
+                                required: min_word_count,
+                            });
+                        }
                     }
                 }
                 // Reset for new section
                 current_section_words.clear();
                 current_header = None;
+                current_header_level = Some(level);
             }
             Event::End(TagEnd::Heading(_)) => {
                 // Header text is now complete
@@ -280,12 +312,15 @@ pub fn validate_planning_document_with_headers(
         let word_count = current_section_words.len();
         result.sections.insert(header.clone(), word_count);
 
-        if word_count < min_word_count {
-            result.add_issue(ValidationIssue::SectionTooShort {
-                header: header.clone(),
-                word_count,
-                required: min_word_count,
-            });
+        // Only validate word count for H2+ headers (skip H1 document titles)
+        if let Some(header_level) = current_header_level {
+            if header_level != pulldown_cmark::HeadingLevel::H1 && word_count < min_word_count {
+                result.add_issue(ValidationIssue::SectionTooShort {
+                    header: header.clone(),
+                    word_count,
+                    required: min_word_count,
+                });
+            }
         }
     }
 

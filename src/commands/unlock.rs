@@ -64,7 +64,8 @@ pub fn execute(project_path: &Path) -> Result<()> {
     println!();
 
     // Phase 3: Resolve Planning Path
-    let planning_dir = config.get_planning_path();
+    let vault_root = config.get_planning_path();
+    let planning_dir = vault_root.join(&config.structure.planning_dir);
 
     if !planning_dir.exists() {
         anyhow::bail!(

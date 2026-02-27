@@ -14,13 +14,22 @@ use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
 use std::sync::{Arc, Mutex};
 
-/// Global state file path (not project-specific)
-const GLOBAL_STATE_FILE: &str = "/home/nullvektor/.config/nexus/session.json";
+/// Returns the cross-platform path to the global Nexus session file
+fn global_state_file() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| {
+            dirs::home_dir()
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+                .join(".config")
+        })
+        .join("nexus")
+        .join("session.json")
+}
 
 /// Execute the shell command - starts an interactive REPL
 pub fn execute() -> Result<()> {
     // Load or create global session state
-    let state_file = std::path::PathBuf::from(GLOBAL_STATE_FILE);
+    let state_file = global_state_file();
     let mut state = NexusState::load(&state_file)?;
 
     // Save initial state
@@ -264,7 +273,7 @@ fn execute_command(
             }
             Ok(())
         }
-        "init" => execute_init_command(args),
+        "init" => execute_init_command(state, args),
         _ => {
             // Check if LLM is enabled and context is enabled for natural language processing
             let is_context_enabled = *context_enabled.lock().unwrap();
@@ -1489,16 +1498,23 @@ fn find_model_paths() -> (String, String) {
     let model_name = "model.onnx";
     let tokenizer_name = "tokenizer.json";
 
-    // List of candidate directories to check
-    let candidates = [
-        "models/models",
-        "models",
-        "/home/nullvektor/repos/nexus_cli/models/models",
+    // Build list of candidate directories to check
+    let mut candidate_dirs: Vec<std::path::PathBuf> = vec![
+        std::path::PathBuf::from("models/models"),
+        std::path::PathBuf::from("models"),
     ];
 
-    for dir in candidates {
-        let model_path = std::path::Path::new(dir).join(model_name);
-        let tokenizer_path = std::path::Path::new(dir).join(tokenizer_name);
+    // Add exe-relative path as a portable fallback
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            candidate_dirs.push(exe_dir.join("models").join("models"));
+            candidate_dirs.push(exe_dir.join("models"));
+        }
+    }
+
+    for dir in &candidate_dirs {
+        let model_path = dir.join(model_name);
+        let tokenizer_path = dir.join(tokenizer_name);
 
         if model_path.exists() && tokenizer_path.exists() {
             return (
@@ -1518,7 +1534,7 @@ fn find_model_paths() -> (String, String) {
 /// * `state` - Current shell session state
 /// * `args` - Command arguments (e.g., ["start"] or ["done"])
 ///   Execute the init command from REPL
-fn execute_init_command(args: &[&str]) -> Result<()> {
+fn execute_init_command(state: &NexusState, args: &[&str]) -> Result<()> {
     if args.is_empty() {
         anyhow::bail!("Usage: init <project-name> [--mode sprint|adhoc] [--project]");
     }
@@ -1549,9 +1565,15 @@ fn execute_init_command(args: &[&str]) -> Result<()> {
         }
     }
 
-    // Call the init module's execute function
-    crate::commands::init::execute(project_name, mode, is_full_project)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    // Call the init module's execute function with repos_root and obsidian_vault_root
+    crate::commands::init::execute(
+        project_name,
+        mode,
+        is_full_project,
+        Some(&state.repos_root),
+        Some(&state.obsidian_vault_root),
+    )
+    .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     Ok(())
 }
